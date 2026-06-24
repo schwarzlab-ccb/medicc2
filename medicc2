@@ -158,6 +158,9 @@ parser.add_argument("--nni-mode", action='store_true', default=False, dest='nni'
 parser.add_argument("--nni-max-iter", type=int, dest='nni_max_iter', default=1000,
                     help='Expert option: Hard cap on the total number of NNI neighbor trees evaluated '
                          'across all sweeps (default: 100).')
+parser.add_argument("--nni-start", type=str, dest="nni_start", default="nj",
+                    help='''Expert option: Starting point for NNI in NNI mode.
+                            Can be either "random" or "neighbor-joining" or "nj" for short (default: nj).''')
 parser.add_argument("--nni-trace", action='store_true', default=False, dest='nni_trace',
                     help='Expert option: Export per-move NNI trace files to <output_dir>/NNI_trace/. '
                          'Only applies in --nni-mode. Creates one file per evaluated NNI neighbor '
@@ -375,6 +378,7 @@ else:
             prune_weight=args.prune_weight,
             nni_max_iter=args.nni_max_iter,
             nni_trace_dir=os.path.join(args.output_dir, "NNI_trace") if args.nni_trace else None,
+            nni_start=args.nni_start,
         )
     else:  # args.spr
         logger.info("Running MEDICC2 with spr moves.")

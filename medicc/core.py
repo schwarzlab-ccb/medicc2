@@ -369,13 +369,17 @@ def main_nni(input_df,
              n_cores=None,
              prune_weight=0,
              nni_max_iter=100,
-             nni_trace_dir=None):
+             nni_trace_dir=None,
+             nni_start="nj"):
     """NNI hill-climbing main method.
 
-    Starts from the MEDICC NJ tree (or `input_tree` if provided) and runs
-    deterministic steepest-ascent NNI hill-climbing until no neighbor strictly
-    improves the score, or `nni_max_iter` sweeps are reached.
+    Starts from the MEDICC NJ tree (or a random tree if nni_start='random', or
+    `input_tree` if provided) and runs deterministic steepest-ascent NNI
+    hill-climbing until no neighbor strictly improves the score, or
+    `nni_max_iter` sweeps are reached.
 
+    nni_start: Starting tree for NNI search. One of 'nj' / 'neighbor-joining'
+        (default) or 'random'. Ignored when input_tree is provided.
     nni_trace_dir: If not None, write one file per evaluated NNI neighbor into
         this directory, then aggregate into nni_trace.tsv.
     """
@@ -389,26 +393,33 @@ def main_nni(input_df,
     sample_labels = input_df.index.get_level_values('sample_id').unique()
 
     if input_tree is None:
-        logger.info("NNI mode: Start with a Neighbor-joining tree.")
-        logger.info("NNI mode: Calculating pairwise distance matrices.")
-        if n_cores is not None and n_cores > 1:
-            pairwise_distances = parallelization_calc_pairwise_distance(
-                sample_labels, asymm_fst, CN_str_dict, n_cores)
+        if nni_start == "random":
+            logger.info("NNI mode: Start with a random tree.")
+            nj_tree = create_random_tree_topology(list(sample_labels), normal_name=normal_name)
+        elif nni_start in ("nj", "neighbor-joining"):
+            logger.info("NNI mode: Start with a Neighbor-joining tree.")
+            logger.info("NNI mode: Calculating pairwise distance matrices.")
+            if n_cores is not None and n_cores > 1:
+                pairwise_distances = parallelization_calc_pairwise_distance(
+                    sample_labels, asymm_fst, CN_str_dict, n_cores)
+            else:
+                pairwise_distances = calc_pairwise_distance_matrix(asymm_fst, CN_str_dict)
+
+            if (pairwise_distances == np.inf).any().any():
+                affected_pairs = [(pairwise_distances.index[s1], pairwise_distances.index[s2])
+                                  for s1, s2 in zip(*np.where((pairwise_distances == np.inf)))]
+                raise MEDICCError("Evolutionary distances could not be calculated for some sample "
+                                  "pairings. Please check the input data.\n\nThe affected pairs are: "
+                                  f"{affected_pairs}")
+
+            logger.info("NNI mode: Inferring tree topology using neighbor-joining.")
+            nj_tree = infer_tree_topology(
+                pairwise_distances.values, pairwise_distances.index, normal_name=normal_name)
+            logger.debug("NNI mode: Adjust the Neighbor-joining tree structure for tree search.")
+            nj_tree = _reshape_nj_for_search(nj_tree, normal_name)
         else:
-            pairwise_distances = calc_pairwise_distance_matrix(asymm_fst, CN_str_dict)
-
-        if (pairwise_distances == np.inf).any().any():
-            affected_pairs = [(pairwise_distances.index[s1], pairwise_distances.index[s2])
-                              for s1, s2 in zip(*np.where((pairwise_distances == np.inf)))]
-            raise MEDICCError("Evolutionary distances could not be calculated for some sample "
-                              "pairings. Please check the input data.\n\nThe affected pairs are: "
-                              f"{affected_pairs}")
-
-        logger.info("NNI mode: Inferring tree topology using neighbor-joining.")
-        nj_tree = infer_tree_topology(
-            pairwise_distances.values, pairwise_distances.index, normal_name=normal_name)
-        logger.debug("NNI mode: Adjust the Neighbor-joining tree structure for tree search.")
-        nj_tree = _reshape_nj_for_search(nj_tree, normal_name)
+            raise NotImplementedError(f"NNI mode: Unknown start option '{nni_start}'. "
+                                      "Use 'nj', 'neighbor-joining', or 'random'.")
     else:
         logger.info("NNI mode: Tree provided, using it as the starting point.")
 
