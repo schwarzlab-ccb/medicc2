@@ -133,6 +133,8 @@ parser.add_argument("--prune-weight", type=int, dest='prune_weight', default=0,
                             result in more accurate ancestors but will require more time and memory. Default: 0''')
 parser.add_argument("--fst", type=str, dest='fst', default=None,
                     help='Expert option: path to an alternative FST.')
+parser.add_argument("--length-encoding-lower-half-only-testing-flag", action='store_true', default=False, dest='length_encoding_lower_half_only_testing_flag',
+                    help='''Expert option: Use the length encoding FST only on the lower half pass in ancestral copy-number reconstruction, DELETE THIS FLAG WHEN RELEASE.''')
 parser.add_argument("--fst-chr-separator", type=str, dest='fst_chr_separator', default='X',
                     help = 'Expert option: character used to separate chromosomes in the FST (default: \"X\").')
 parser.add_argument("--wgd-x2", action='store_true', default=False, dest='wgd_x2',

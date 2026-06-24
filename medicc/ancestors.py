@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+import copy 
 
 import Bio
 import Bio.Phylo
@@ -52,9 +53,12 @@ def _group_nodes_by_depth(clade_list, normal_name):
     return levels
 
 
-def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0,
+def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, normal_name, lower_pass_fst, prune_weight=0,
                           spr_logger_disable=False, n_cores=None):
     """Full ancestor reconstruction.
+
+    upper_pass_fst: the FST to use during upper pass
+    lower_pass_fst: the FST to use during lower pass
 
     Returns:
         tuple: (fsa_dict, uppass_cache)
@@ -98,7 +102,7 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0,
                 delayed(_intersect_task)(
                     fsa_dict[[c for c in node.clades if c.name != normal_name][0].name],
                     fsa_dict[[c for c in node.clades if c.name != normal_name][1].name],
-                    fst, prune_weight
+                    upper_pass_fst, prune_weight
                 ) for node in nodes_at_depth
             )
             for node, result in zip(nodes_at_depth, results):
@@ -111,7 +115,7 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0,
                 right_name = children[1].name
                 logger.debug(f"Clade: {node.name}, left: {left_name}, right: {right_name}")
                 fsa_dict[node.name] = _intersect_task(
-                    fsa_dict[left_name], fsa_dict[right_name], fst, prune_weight)
+                    fsa_dict[left_name], fsa_dict[right_name], upper_pass_fst, prune_weight)
 
     # Snapshot up-pass results before root alignment and down-pass overwrite them
     uppass_cache = {node.name: fsa_dict[node.name]
@@ -120,7 +124,7 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0,
     logger.debug("Ancestor reconstruction for root")
     # root node is calculated separately w.r.t. normal node
     root_name = clade_list[0].name 
-    sp = fstlib.align(fst, fsa_dict[normal_name], fsa_dict[root_name])
+    sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
     fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
     logger.info("Ancestor reconstruction: Down the tree")
@@ -139,7 +143,7 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0,
         if use_parallel and len(pairs) > 1:
             from joblib import Parallel, delayed
             results = Parallel(n_jobs=n_cores)(
-                delayed(_align_task)(fsa_dict[pname], fsa_dict[cname], fst)
+                delayed(_align_task)(fsa_dict[pname], fsa_dict[cname], lower_pass_fst)
                 for pname, cname in pairs
             )
             for (_, cname), result in zip(pairs, results):
@@ -148,7 +152,7 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0,
         else:
             for pname, cname in pairs:
                 logger.debug(f"Clade: {pname}, internal child: {cname}")
-                fsa_dict[cname] = _align_task(fsa_dict[pname], fsa_dict[cname], fst)
+                fsa_dict[cname] = _align_task(fsa_dict[pname], fsa_dict[cname], lower_pass_fst)
 
     # check if ancestors were correctly reconstructed
     sample_lengths = {sample: len(medicc.tools.fsa_to_string(fsa_dict[sample])) for sample, fsa in fsa_dict.items()}

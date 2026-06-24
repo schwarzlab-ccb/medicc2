@@ -37,7 +37,8 @@ def main(input_df,
          total_cn=False,
          n_cores=None,
          reconstruct_events=False,
-         euclidean=False):
+         euclidean=False,
+         test_flag_for_length_encoding_only_on_the_lower_half_delete_when_release_to_public=False):
     """ MEDICC Main Method """
 
     symbol_table = asymm_fst.input_symbols()
@@ -96,9 +97,18 @@ def main(input_df,
 
     if ancestral_reconstruction:
         logger.info("Reconstructing ancestors.")
+        # default pass use the user/default fst for upper and lower pass
+        upper_fst = asymm_fst
+        lower_pass_fst = asymm_fst
+
+        if test_flag_for_length_encoding_only_on_the_lower_half_delete_when_release_to_public:
+            upper_fst = event_counting_fst
+            lower_pass_fst = asymm_fst
+
         ancestors, _uppass_cache = medicc.reconstruct_ancestors(tree=final_tree,
                                                  samples_dict=FSA_dict,
-                                                 fst=asymm_fst,
+                                                 upper_pass_fst=upper_fst,
+                                                 lower_pass_fst=lower_pass_fst,
                                                  normal_name=normal_name,
                                                  prune_weight=prune_weight,
                                                  spr_logger_disable=False,
