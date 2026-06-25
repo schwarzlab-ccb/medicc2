@@ -135,6 +135,11 @@ parser.add_argument("--fst", type=str, dest='fst', default=None,
                     help='Expert option: path to an alternative FST.')
 parser.add_argument("--length-encoding-lower-half-only-testing-flag", action='store_true', default=False, dest='length_encoding_lower_half_only_testing_flag',
                     help='''Expert option: Use the length encoding FST only on the lower half pass in ancestral copy-number reconstruction, DELETE THIS FLAG WHEN RELEASE.''')
+parser.add_argument("--constrained-sankoff", action='store_true', default=False, dest='constrained_sankoff',
+                    help='''Expert option: reconstruct ancestors with the constrained-Sankoff DP -- event-minimal
+                            candidate sets (event-counting FST) with a length-minimising Sankoff down-pass under the
+                            --fst length-encoding FST. Pass a high open value (e.g. open=5000) so the result stays
+                            event-minimal while minimising total focal-event length.''')
 parser.add_argument("--fst-chr-separator", type=str, dest='fst_chr_separator', default='X',
                     help = 'Expert option: character used to separate chromosomes in the FST (default: \"X\").')
 parser.add_argument("--wgd-x2", action='store_true', default=False, dest='wgd_x2',
@@ -258,7 +263,9 @@ if not args.spr and not args.nni:
         total_cn=args.total_copy_numbers,
         n_cores=args.n_cores,
         reconstruct_events=args.events,
-        euclidean=False)
+        euclidean=False,
+        test_flag_for_length_encoding_only_on_the_lower_half_delete_when_release_to_public=args.length_encoding_lower_half_only_testing_flag,
+        constrained_sankoff=args.constrained_sankoff)
 
 
     # Write events table and overlap events with chromosome and oncogenes

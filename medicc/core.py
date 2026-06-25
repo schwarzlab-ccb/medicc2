@@ -38,7 +38,8 @@ def main(input_df,
          n_cores=None,
          reconstruct_events=False,
          euclidean=False,
-         test_flag_for_length_encoding_only_on_the_lower_half_delete_when_release_to_public=False):
+         test_flag_for_length_encoding_only_on_the_lower_half_delete_when_release_to_public=False,
+         constrained_sankoff=False):
     """ MEDICC Main Method """
 
     symbol_table = asymm_fst.input_symbols()
@@ -105,7 +106,23 @@ def main(input_df,
             upper_fst = event_counting_fst
             lower_pass_fst = asymm_fst
 
-        ancestors, _uppass_cache = medicc.reconstruct_ancestors(tree=final_tree,
+        if constrained_sankoff:
+            # event-minimal candidate sets (event FST) + length-minimising Sankoff
+            # DP under the user-provided length-encoding FST (use a high open value,
+            # e.g. open=5000, so the result stays event-minimal).
+            upper_fst = event_counting_fst
+            lower_pass_fst = asymm_fst
+            ancestors, _uppass_cache = medicc.reconstruct_ancestors_constrained_sankoff(
+                                                 tree=final_tree,
+                                                 samples_dict=FSA_dict,
+                                                 upper_pass_fst=upper_fst,
+                                                 lower_pass_fst=lower_pass_fst,
+                                                 normal_name=normal_name,
+                                                 prune_weight=prune_weight,
+                                                 spr_logger_disable=False,
+                                                 n_cores=n_cores)
+        else:
+            ancestors, _uppass_cache = medicc.reconstruct_ancestors(tree=final_tree,
                                                  samples_dict=FSA_dict,
                                                  upper_pass_fst=upper_fst,
                                                  lower_pass_fst=lower_pass_fst,

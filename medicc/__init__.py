@@ -14,7 +14,7 @@ import medicc.tools
 import medicc.spr
 import medicc.nni
 import medicc.tree_hash
-from medicc.ancestors import reconstruct_ancestors, reconstruct_ancestors_incremental
+from medicc.ancestors import reconstruct_ancestors, reconstruct_ancestors_incremental, reconstruct_ancestors_constrained_sankoff
 from medicc.core import *
 from medicc.factory import *
 from medicc._version import __version__

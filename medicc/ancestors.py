@@ -170,6 +170,117 @@ def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, normal_name, lower
     return fsa_dict, uppass_cache
 
 
+def _detmin_weighted(f):
+    """Determinize+minimize a weighted acceptor to keep the cost-to-go automata
+    compact (the project step below creates one parallel path per child state;
+    determinization collapses them to one min-weight path per string). Weighted
+    determinization is exact for these acyclic profile automata."""
+    return fstlib.determinize(f.arcsort('ilabel')).minimize()
+
+
+def _cost_to_go_through_child(obj_fst, child_cost_acc, parent_mask):
+    """Cost-to-go contribution of one child, as a function of the parent state s:
+        T(s) = min over child states s_c of [ obj_fst(s -> s_c) + C_child(s_c) ]
+    masked to the parent's event-minimal candidate set. The project to the input
+    side performs the min over s_c in the tropical semiring."""
+    comp = fstlib.compose(obj_fst.arcsort('olabel'), child_cost_acc.copy().arcsort('ilabel'))
+    T = comp.project('input')
+    T = fstlib.intersect(T.arcsort('olabel'), parent_mask)
+    return _detmin_weighted(T)
+
+
+def _best_child(obj_fst, parent_string_fsa, child_cost_acc):
+    """Cost-aware backtrace for one parent->child edge: given the already-committed
+    single parent string, return the child string minimising
+        obj_fst(parent -> s_c) + C_child(s_c)."""
+    comp = fstlib.compose(parent_string_fsa.copy().arcsort('olabel'), obj_fst.arcsort('olabel'))
+    comp = fstlib.compose(comp.arcsort('olabel'), child_cost_acc.copy().arcsort('ilabel'))
+    sp = fstlib.shortestpath(comp)
+    return fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
+
+
+def reconstruct_ancestors_constrained_sankoff(tree, samples_dict, upper_pass_fst, normal_name,
+                                              lower_pass_fst, prune_weight=0,
+                                              spr_logger_disable=False, n_cores=None):
+    """Constrained-Sankoff ancestor reconstruction.
+
+    Same up-pass as reconstruct_ancestors (the ``upper_pass_fst`` builds each
+    internal node's *event-minimal* candidate set), but the greedy parent-only
+    down-pass is replaced by a proper Sankoff dynamic program under
+    ``lower_pass_fst``: a cost-to-go up-sweep (best achievable objective cost over
+    the whole subtree as a function of the node's state, restricted to the
+    event-minimal candidate set) followed by a cost-aware backtrace.
+
+    With ``lower_pass_fst`` an open-K length-encoding FST (K larger than the
+    maximum total span, e.g. open=5000), this returns the reconstruction that
+    minimises the total focal-event length among ALL event-minimal labellings
+    (whole-chromosome / WGD events are flat-cost and contribute no length). Unlike
+    the greedy down-pass it accounts for each node's descendants, so it never does
+    worse than greedy and is provably optimal for the objective over the
+    event-minimal feasible set.
+
+    Args mirror reconstruct_ancestors; returns (fsa_dict, uppass_cache).
+
+    Note: the cost-to-go automata can be large for trees with very many co-optimal
+    ancestors; this runs serially and is memory-bound on such cases (n_cores is
+    accepted for signature compatibility but unused).
+    """
+    if len(samples_dict) == 2:
+        return samples_dict, {}
+
+    fsa_dict = samples_dict.copy()
+    tree = Bio.Phylo.BaseTree.copy.deepcopy(tree)
+    clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
+    levels = _group_nodes_by_depth(clade_list, normal_name)
+
+    # --- up the tree: event-minimal candidate sets S_v (event-counting FST) ---
+    logger.info("Constrained Sankoff: up the tree (event-minimal candidate sets)")
+    for depth in sorted(levels.keys(), reverse=True):
+        for node in (n for n in levels[depth] if len(n.clades) != 0):
+            children = [item for item in node.clades if item.name != normal_name]
+            fsa_dict[node.name] = intersect_clades_detmin(
+                fsa_dict[children[0].name], fsa_dict[children[1].name], upper_pass_fst,
+                prune_weight=prune_weight, detmin_before_intersect=False, detmin_after_intersect=True)
+
+    uppass_cache = {node.name: fsa_dict[node.name]
+                    for node in clade_list if len(node.clades) != 0}
+
+    # --- cost-to-go under the objective FST, masked to S_v at every node ---
+    logger.info("Constrained Sankoff: cost-to-go up-sweep (objective FST)")
+    cost_to_go = {name: samples_dict[name] for name in samples_dict}  # leaf cost-to-go = leaf string, weight 0
+    for depth in sorted(levels.keys(), reverse=True):
+        for node in (n for n in levels[depth] if len(n.clades) != 0):
+            children = [item for item in node.clades if item.name != normal_name]
+            mask = fstlib.arcmap(fsa_dict[node.name].copy(), map_type='rmweight').arcsort('ilabel')
+            terms = [_cost_to_go_through_child(lower_pass_fst, cost_to_go[c.name], mask) for c in children]
+            Cv = terms[0]
+            for t in terms[1:]:
+                Cv = _detmin_weighted(fstlib.intersect(Cv.arcsort('olabel'), t.arcsort('ilabel')))
+            cost_to_go[node.name] = Cv
+
+    # --- root choice, then cost-aware backtrace down the tree ---
+    logger.info("Constrained Sankoff: backtrace down the tree")
+    root_name = clade_list[0].name
+    fsa_dict[root_name] = _best_child(lower_pass_fst, fsa_dict[normal_name], cost_to_go[root_name])
+    for depth in sorted(levels.keys()):
+        for node in levels[depth]:
+            if len(node.clades) == 0:
+                continue
+            for child in node.clades:
+                if child.name == normal_name or len(child.clades) == 0:
+                    continue
+                fsa_dict[child.name] = _best_child(lower_pass_fst, fsa_dict[node.name], cost_to_go[child.name])
+
+    # check if ancestors were correctly reconstructed
+    sample_lengths = {sample: len(medicc.tools.fsa_to_string(fsa_dict[sample])) for sample, fsa in fsa_dict.items()}
+    normal_length = sample_lengths[normal_name]
+    if np.any([x != normal_length for x in sample_lengths.values()]):
+        raise MEDICCAncestorReconstructionError("Some ancestors could not be reconstructed. These are:\n"
+                                                "{}".format('\n'.join([sample for sample, length in sample_lengths.items() if length != normal_length])) + \
+                                                "\nCheck whether your normal sample contains segments with copy number zero")
+    return fsa_dict, uppass_cache
+
+
 def _get_dirty_nodes_up(tree, spr_result, normal_name):
     """Compute the set of internal node names whose up-pass (intersection) results
     need recomputation after an SPR move.
