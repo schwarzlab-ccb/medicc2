@@ -491,7 +491,7 @@ def test_nni_parallel_matches_serial():
 
     tree = _make_search_shape_tree(5)
     ancestors, uppass_cache = medicc.reconstruct_ancestors(
-        tree=tree, samples_dict=fsa_dict, fst=fst,
+        tree=tree, samples_dict=fsa_dict, upper_pass_fst=fst, lower_pass_fst=fst,
         normal_name="diploid", prune_weight=0, spr_logger_disable=True)
     core.update_branch_lengths(tree, fst, ancestors, "diploid")
 
@@ -565,7 +565,7 @@ def test_nni_incremental_matches_full_reconstruction():
 
     # Bootstrap: full reconstruction of the start tree to populate uppass_cache
     ancestors, uppass_cache = medicc.reconstruct_ancestors(
-        tree=tree, samples_dict=fsa_dict, fst=fst,
+        tree=tree, samples_dict=fsa_dict, upper_pass_fst=fst, lower_pass_fst=fst,
         normal_name="diploid", prune_weight=0,
         spr_logger_disable=True)
     core.update_branch_lengths(tree, fst, ancestors, "diploid")
@@ -583,7 +583,7 @@ def test_nni_incremental_matches_full_reconstruction():
         # Full from scratch
         nbr_full = copy.deepcopy(neighbor_tree)
         full_ancestors, _ = medicc.reconstruct_ancestors(
-            tree=nbr_full, samples_dict=fsa_dict, fst=fst,
+            tree=nbr_full, samples_dict=fsa_dict, upper_pass_fst=fst, lower_pass_fst=fst,
             normal_name="diploid", prune_weight=0,
             spr_logger_disable=True)
         core.update_branch_lengths(nbr_full, fst, full_ancestors, "diploid")
@@ -603,7 +603,7 @@ def test_evaluate_nni_neighbors_parallel_returns_step():
     n_moves = len(moves)
 
     call_steps = []
-    def fake_eval(tree, move, old_uppass_cache, samples_dict, fst, normal_name, prune_weight, step=0):
+    def fake_eval(tree, move, old_uppass_cache, samples_dict, fst, normal_name, prune_weight, step=0, upper_pass_fst=None, lower_pass_fst=None):
         call_steps.append(step)
         return (MagicMock(), {}, {}, 10, step)
 
@@ -632,7 +632,7 @@ def test_evaluate_nni_neighbors_parallel_step_start_zero():
     moves = nni_mod._enumerate_moves(tree)
 
     call_steps = []
-    def fake_eval(tree, move, old_uppass_cache, samples_dict, fst, normal_name, prune_weight, step=0):
+    def fake_eval(tree, move, old_uppass_cache, samples_dict, fst, normal_name, prune_weight, step=0, upper_pass_fst=None, lower_pass_fst=None):
         call_steps.append(step)
         return (MagicMock(), {}, {}, 5, step)
 

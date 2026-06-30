@@ -321,7 +321,8 @@ def _get_dirty_nodes_up(tree, spr_result, normal_name):
 
 
 def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst, normal_name,
-                                      spr_result, prune_weight=0):
+                                      spr_result, prune_weight=0,
+                                      upper_pass_fst=None, lower_pass_fst=None):
     """Incremental ancestor reconstruction after an SPR move.
 
     Reuses the up-pass (intersection) results from old_uppass_cache for nodes whose
@@ -332,6 +333,15 @@ def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst,
     propagate from the root downward and it's simpler/safer to redo entirely.
 
     Args:
+        fst: single FST used for both passes when upper_pass_fst/lower_pass_fst
+            are not given (backward-compatible default, e.g. the SPR path).
+        upper_pass_fst: optional override for the up-pass (intersection). When
+            None, falls back to `fst`.
+        lower_pass_fst: optional override for the down-pass (alignment against
+            parent) and the root alignment. When None, falls back to `fst`.
+            Used by the NNI path to run the "lower-half" length-encoding objective:
+            event-counting FST for the up-pass, length-encoding FST for the
+            down-pass.
         old_uppass_cache: dict mapping internal node names to their up-pass
             (intersection-only) FSAs from the previous iteration. This must be
             the pure up-pass results, NOT the post-down-pass aligned ancestors.
@@ -339,6 +349,8 @@ def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst,
     Returns:
         tuple: (fsa_dict, uppass_cache) — same contract as reconstruct_ancestors.
     """
+    up_fst = upper_pass_fst if upper_pass_fst is not None else fst
+    down_fst = lower_pass_fst if lower_pass_fst is not None else fst
     fsa_dict = samples_dict.copy()
     tree = Bio.Phylo.BaseTree.copy.deepcopy(tree)
 
@@ -363,7 +375,7 @@ def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst,
                 right_name = children[1].name
                 logger.debug(f"Incremental up-pass (dirty): {node.name}, left: {left_name}, right: {right_name}")
                 fsa_dict[node.name] = _intersect_task(
-                    fsa_dict[left_name], fsa_dict[right_name], fst, prune_weight)
+                    fsa_dict[left_name], fsa_dict[right_name], up_fst, prune_weight)
             else:
                 # Reuse cached up-pass intersection result
                 if node.name in old_uppass_cache:
@@ -377,7 +389,7 @@ def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst,
                     right_name = children[1].name
                     logger.debug(f"Incremental up-pass (new node): {node.name}, left: {left_name}, right: {right_name}")
                     fsa_dict[node.name] = _intersect_task(
-                        fsa_dict[left_name], fsa_dict[right_name], fst, prune_weight)
+                        fsa_dict[left_name], fsa_dict[right_name], up_fst, prune_weight)
 
     # Snapshot up-pass results before root alignment and down-pass overwrite them
     uppass_cache = {node.name: fsa_dict[node.name]
@@ -385,7 +397,7 @@ def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst,
 
     # --- ROOT ---
     root_name = clade_list[0].name
-    sp = fstlib.align(fst, fsa_dict[normal_name], fsa_dict[root_name])
+    sp = fstlib.align(down_fst, fsa_dict[normal_name], fsa_dict[root_name])
     fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
     # --- DOWN THE TREE (root to leaf) — always full ---
@@ -393,7 +405,7 @@ def reconstruct_ancestors_incremental(tree, old_uppass_cache, samples_dict, fst,
         if len(node.clades) != 0:
             children = [q for q in node.clades if len(q.clades) != 0]
             for child in children:
-                sp = fstlib.align(fst, fsa_dict[node.name], fsa_dict[child.name])
+                sp = fstlib.align(down_fst, fsa_dict[node.name], fsa_dict[child.name])
                 fsa_dict[child.name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
     # Validation

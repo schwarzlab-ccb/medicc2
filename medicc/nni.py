@@ -116,16 +116,25 @@ def nni_neighbors(tree):
 
 
 def _eval_nni_neighbor(tree, move, old_uppass_cache, samples_dict, fst,
-                       normal_name, prune_weight, step=0):
+                       normal_name, prune_weight, step=0,
+                       upper_pass_fst=None, lower_pass_fst=None):
     """Apply one NNI move and evaluate it.  Runs inside a worker process.
 
     Deepcopy happens here so the main process never copies the tree before
     forking.  Returns (new_tree, ancestors, uppass_cache, score, step).
+
+    upper_pass_fst/lower_pass_fst: optional separate FSTs for the up-pass and
+    down-pass (the "lower-half" length-encoding objective). When None both fall
+    back to `fst`. Branch lengths / the move score are computed under the
+    down-pass FST so the hill-climb ranks neighbors by the length-encoding
+    objective (e.g. open=5000: 5000*events + span).
     """
     # Import lazily — these are heavy and only needed inside workers.
     from medicc.ancestors import reconstruct_ancestors_incremental
     import medicc.tools
     import medicc.core as core
+
+    score_fst = lower_pass_fst if lower_pass_fst is not None else fst
 
     new_tree = _apply_nni_swap(
         tree=tree,
@@ -148,15 +157,18 @@ def _eval_nni_neighbor(tree, move, old_uppass_cache, samples_dict, fst,
         normal_name=normal_name,
         spr_result=synthetic,
         prune_weight=prune_weight,
+        upper_pass_fst=upper_pass_fst,
+        lower_pass_fst=lower_pass_fst,
     )
-    core.update_branch_lengths(new_tree, fst, ancestors, normal_name)
+    core.update_branch_lengths(new_tree, score_fst, ancestors, normal_name)
     score = medicc.tools.sum_of_branch_length(new_tree)
     return new_tree, ancestors, new_uppass_cache, score, step
 
 
 def evaluate_nni_neighbors_parallel(tree, old_uppass_cache, samples_dict, fst,
                                     normal_name, prune_weight, n_cores,
-                                    step_start=0):
+                                    step_start=0, upper_pass_fst=None,
+                                    lower_pass_fst=None):
     """Evaluate all NNI neighbors in parallel using joblib.
 
     Returns a list of (new_tree, ancestors, uppass_cache, score, step) tuples,
@@ -164,6 +176,9 @@ def evaluate_nni_neighbors_parallel(tree, old_uppass_cache, samples_dict, fst,
     worker so the main process does not copy the tree before forking.
     `step_start` sets the step number of the first neighbor; subsequent
     neighbors get step_start+1, step_start+2, etc.
+
+    upper_pass_fst/lower_pass_fst: optional separate up-/down-pass FSTs for the
+    length-encoding objective (see _eval_nni_neighbor). Forwarded to each worker.
     """
     try:
         from joblib import Parallel, delayed
@@ -178,6 +193,8 @@ def evaluate_nni_neighbors_parallel(tree, old_uppass_cache, samples_dict, fst,
         delayed(_eval_nni_neighbor)(
             tree, move, old_uppass_cache, samples_dict, fst, normal_name, prune_weight,
             step=step_start + i,
+            upper_pass_fst=upper_pass_fst,
+            lower_pass_fst=lower_pass_fst,
         )
         for i, move in enumerate(moves)
     )

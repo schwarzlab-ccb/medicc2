@@ -191,15 +191,21 @@ def _wrap_tree_for_output(final_tree, fst, ancestors, normal_name):
 
     Mutates and returns the input tree.
     """
+    # Recompute branch lengths on the search-shape tree FIRST — while the root is
+    # still the diploid/normal and the MRCA is its named child, so the MRCA edge is
+    # scored under `fst` like every other edge. After the re-root below, the MRCA's
+    # parent is the new unnamed root, which update_branch_lengths skips, leaving the
+    # MRCA edge with whatever the search left on it (e.g. an open=5000 length-
+    # encoding score instead of the event count).
+    logger.info("Updating branch lengths of final tree using ancestors.")
+    update_branch_lengths(final_tree, fst, ancestors, normal_name)
+
     new_root_clade = Bio.Phylo.PhyloXML.Clade(branch_length=0)
     final_tree.root.branch_length = 0
     new_root_clade.clades.append(final_tree.root)
     new_root_clade.clades.append(final_tree.root.clades[0])
     final_tree.root.clades = []
     final_tree.root = new_root_clade
-
-    logger.info("Updating branch lengths of final tree using ancestors.")
-    update_branch_lengths(final_tree, fst, ancestors, normal_name)
     return final_tree
 
 
@@ -464,6 +470,24 @@ def main_nni(input_df,
             [x for x in input_tree.root.clades if x.name != normal_name][0].name)
         nj_tree = input_tree
 
+    # NNI default objective: the "greedy open=5000" length-encoding reconstruction.
+    # Up-pass uses the event-counting FST (keeps the reconstruction event-minimal —
+    # the length-encoding cost does not decompose per-segment, so a length-encoding
+    # up-pass with prune_weight=0 inflates events). Down-pass + branch-length scoring
+    # use the open=5000 length-encoding FST (5000*events + span), so the hill-climb
+    # is event-minimal first, span-minimal as the tiebreak.
+    objects_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "objects")
+    le_fst_path = os.path.join(objects_dir, "gain_loss_extend_open_5000_extend_1.fst")
+    if os.path.isfile(le_fst_path):
+        logger.info(f"NNI mode: using greedy open=5000 length-encoding objective ({le_fst_path}).")
+        nni_upper_pass_fst = event_counting_fst
+        nni_lower_pass_fst = io.read_fst(user_fst=le_fst_path)
+    else:
+        logger.warning(f"NNI mode: open=5000 length-encoding FST not found at {le_fst_path}; "
+                       "falling back to the single input FST for the NNI search.")
+        nni_upper_pass_fst = asymm_fst
+        nni_lower_pass_fst = asymm_fst
+
     logger.info("NNI mode: Running NNI hill-climbing to infer phylogenetic tree.")
     nni_result = nni_mode(
         tree=copy.deepcopy(nj_tree),
@@ -474,6 +498,8 @@ def main_nni(input_df,
         nni_max_iter=nni_max_iter,
         n_cores=n_cores,
         nni_trace_dir=nni_trace_dir,
+        upper_pass_fst=nni_upper_pass_fst,
+        lower_pass_fst=nni_lower_pass_fst,
     )
     final_tree_l = nni_result["best_trees"]
     ancestors_l = nni_result["best_ancestors"]
@@ -972,7 +998,8 @@ def _spr_mode_single_chain(tree, samples_dict, fst, normal_name="diploid", prune
     # MCMC starting point — full reconstruction
     ancestors, uppass_cache = medicc.reconstruct_ancestors(tree=tree,
                                              samples_dict=samples_dict,
-                                             fst=fst,
+                                             upper_pass_fst=fst,
+                                             lower_pass_fst=fst,
                                              normal_name=normal_name,
                                              prune_weight=prune_weight,
                                              spr_logger_disable=True,
@@ -1159,7 +1186,8 @@ def spr_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0, MCM
 
 
 def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
-             nni_max_iter=1000, n_cores=None, nni_trace_dir=None):
+             nni_max_iter=1000, n_cores=None, nni_trace_dir=None,
+             upper_pass_fst=None, lower_pass_fst=None):
     """Iterated steepest-ascent NNI hill-climbing with plateau traversal.
 
     At each sweep: enumerate all NNI neighbors of every tree in the current
@@ -1197,12 +1225,19 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
     assert tree.root.name == normal_name, \
         "nni_mode expects a search-shape tree (root.name == normal_name)"
 
+    # Up-/down-pass FSTs. When not overridden, both fall back to `fst` (single-FST
+    # behaviour). The NNI default supplies an event-counting up-pass FST and a
+    # length-encoding down-pass/scoring FST (the "lower-half" objective).
+    up_fst = upper_pass_fst if upper_pass_fst is not None else fst
+    down_fst = lower_pass_fst if lower_pass_fst is not None else fst
+
     # Initial full reconstruction
     ancestors, uppass_cache = medicc.reconstruct_ancestors(
-        tree=tree, samples_dict=samples_dict, fst=fst,
+        tree=tree, samples_dict=samples_dict,
+        upper_pass_fst=up_fst, lower_pass_fst=down_fst,
         normal_name=normal_name, prune_weight=prune_weight,
         spr_logger_disable=True, n_cores=n_cores)
-    update_branch_lengths(tree, fst, ancestors, normal_name)
+    update_branch_lengths(tree, down_fst, ancestors, normal_name)
     current_score = medicc.tools.sum_of_branch_length(tree)
     trace = [current_score]
     logger.info(f"NNI mode: initial score = {current_score}")
@@ -1241,6 +1276,8 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
                     prune_weight=prune_weight,
                     n_cores=n_cores,
                     step_start=step_start,
+                    upper_pass_fst=up_fst,
+                    lower_pass_fst=down_fst,
                 )
                 for neighbor_tree, new_ancestors, new_uppass_cache, score, step in neighbor_results:
                     n_evaluated += 1
@@ -1266,8 +1303,10 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
                         fst=fst,
                         normal_name=normal_name,
                         spr_result=synthetic_spr_result,
-                        prune_weight=prune_weight)
-                    update_branch_lengths(neighbor_tree, fst, new_ancestors, normal_name)
+                        prune_weight=prune_weight,
+                        upper_pass_fst=up_fst,
+                        lower_pass_fst=down_fst)
+                    update_branch_lengths(neighbor_tree, down_fst, new_ancestors, normal_name)
                     score = medicc.tools.sum_of_branch_length(neighbor_tree)
                     step = step_start + i
                     if do_trace:
