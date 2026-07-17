@@ -369,7 +369,7 @@ def _plot_cn_profile(ax, label, data, mincn, maxcn, alleles, type='sample',
         # a and b are overlapping
         colors_a[data[alleles[0]] == data[alleles[1]], 3] = 0.5
         colors_b[data[alleles[0]] == data[alleles[1]], 3] = 0.5
-        colors = np.row_stack([colors_a, colors_b])
+        colors = np.vstack([colors_a, colors_b])
     else:
         colors = colors_a
     lc = mpl.collections.LineCollection(

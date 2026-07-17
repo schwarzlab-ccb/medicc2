@@ -37,7 +37,7 @@ def read_and_parse_input_data(filename, normal_name='diploid', input_type='tsv',
         raise MEDICCIOError("Unknown input type, possible options are 'fasta' or 'tsv'.")
 
     input_df.columns.name = 'allele'
-    input_df_stacked = input_df.stack('allele').unstack('sample_id').T
+    input_df_stacked = input_df.stack('allele', future_stack=True).unstack('sample_id').T
 
     duplicated_entries = input_df_stacked.duplicated(keep=False)
     if duplicated_entries.any():
@@ -231,13 +231,13 @@ def _read_fasta_as_dataframe(infile: str, separator: str = 'X', allele_columns =
     a data frame with the same format as the input TSV format. """
     logger.info(f"Reading FASTA dataset from description file {infile}.")
     description_file = pd.read_csv(infile,
-                                    delim_whitespace = True,
+                                    sep='\s+',
                                     header = None,
                                     names = ["chrom",] + allele_columns,
                                     usecols = ["chrom",] + allele_columns)
     description_file.set_index('chrom', inplace=True)
     description_file.columns.name='allele'
-    description_file = description_file.stack()
+    description_file = description_file.stack(future_stack=True)
     inpath = os.path.dirname(infile)
 
     payload = []
@@ -257,7 +257,7 @@ def _read_fasta_as_dataframe(infile: str, separator: str = 'X', allele_columns =
         payload=payload.unstack('chrom').reorder_levels(['chrom','id'],axis=1)
         payload.columns = [f"{c}{i+1}" for c,i in payload.columns]
         payload.columns.name = 'chrom'
-        payload = payload.stack()
+        payload = payload.stack(future_stack=True)
         payload = payload.reorder_levels([1,2,0]).sort_index()
     else:
         payload = payload.iloc[:,0]

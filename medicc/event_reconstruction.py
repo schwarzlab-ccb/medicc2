@@ -311,7 +311,7 @@ def calculate_cn_events_per_branch(cur_df, parent_name, child_name, alleles=['cn
             events_df.loc[cur_ind, 'sample_id'] = child_name
             events_df.loc[cur_ind, 'allele'] = allele
             events_df.loc[cur_ind, 'type'] = cur_event
-            events_df.loc[cur_ind, 'cn_child'] = cur_events[:, 3]
+            events_df.loc[cur_ind, 'cn_child'] = cur_events[:, 3].astype(float)
             events_df.loc[cur_ind, ['chrom', 'start', 'end']] = cur_events[:, :3]
 
             cur_child_cn.loc[np.intersect1d(loh_pos.loc[~loh_pos[allele]].index,

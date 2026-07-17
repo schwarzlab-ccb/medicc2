@@ -196,7 +196,7 @@ if args.filter_segment_length is not None:
 if args.exclude_samples is not None:
     exclude_samples = np.array([x.strip() for x in args.exclude_samples.split(',')])
     logger.info(f"Excluding samples {', '.join(exclude_samples)}.")
-    input_df = input_df.loc[~np.in1d(input_df.index.get_level_values('sample_id'), exclude_samples), :]
+    input_df = input_df.loc[~np.isin(input_df.index.get_level_values('sample_id'), exclude_samples), :]
 
 if args.n_cores is not None:
     logger.info("Running on {} cores.".format(args.n_cores))

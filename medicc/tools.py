@@ -25,7 +25,7 @@ def set_sequences_on_tree_from_df(tree: Bio.Phylo.BaseTree, df: pd.DataFrame, cl
     for clade in tree.find_clades():
         if clear_before:
             clade.sequences.clear()
-        for label, data in df.iteritems():
+        for label, data in df.items():
             try:
                 clade.sequences.append(
                     Bio.Phylo.PhyloXML.Sequence(

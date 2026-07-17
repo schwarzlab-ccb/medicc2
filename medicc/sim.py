@@ -204,7 +204,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
 
 
 def _edgelist_to_tree(el, add_normal=True, normal_name='diploid'):
-    clades = {name:Bio.Phylo.PhyloXML.Clade(name=name) for name in el[['name_a','name_b']].stack().unique()} 
+    clades = {name:Bio.Phylo.PhyloXML.Clade(name=name) for name in el[['name_a','name_b']].stack(future_stack=True).unique()}
     if add_normal:
         clades[normal_name] = Bio.Phylo.PhyloXML.Clade(name=normal_name, branch_length=1)
         clades['mrca'].clades.append(clades[normal_name])

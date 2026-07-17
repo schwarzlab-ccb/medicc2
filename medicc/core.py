@@ -259,7 +259,7 @@ def create_df_from_fsa(input_df: pd.DataFrame, fsa, separator: str = 'X'):
     internal_cns_df = pd.DataFrame(internal_cns, index=output_df.index)
     internal_cns_df.columns.names = ['allele', 'sample_id']
     output_df = (pd.concat([output_df, internal_cns_df], axis=1)
-                 .stack('sample_id')
+                 .stack('sample_id', future_stack=True)
                  .reorder_levels(['sample_id', 'chrom', 'start', 'end'])
                  .sort_index())
 
