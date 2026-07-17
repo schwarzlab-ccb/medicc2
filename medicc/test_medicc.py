@@ -1,6 +1,7 @@
 import os
 import pathlib
 import subprocess
+import sys
 import time
 
 import numpy as np
@@ -13,7 +14,7 @@ import medicc
 
 def test_medicc_help_box():
     "Just testing that medicc can be started"
-    process = subprocess.Popen(['python', "medicc2", "--help"],
+    process = subprocess.Popen([sys.executable, "medicc2", "--help"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
 
@@ -76,7 +77,7 @@ def test_medicc_distance_speed_up():
 def test_medicc_with_simple_example():
     "Testing small example"
     output_dir = 'examples/test_output'
-    process = subprocess.Popen(['python', "medicc2", "examples/simple_example/simple_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/simple_example/simple_example.tsv", 
                                 output_dir, "--plot", "both", "--events", "--chromosomes-bed",
                                 "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
@@ -113,7 +114,7 @@ def test_medicc_with_simple_example():
 def test_medicc_with_testing_example():
     "Testing testing example"
     output_dir = 'examples/test_output'
-    process = subprocess.Popen(['python', "medicc2", "examples/testing_example/testing_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
@@ -144,7 +145,7 @@ def test_medicc_with_testing_example():
 def test_medicc_with_testing_example_total_copy_numbers():
     "Testing small example"
     output_dir = 'examples/test_output_total_cn'
-    process = subprocess.Popen(['python', "medicc2", "examples/testing_example/testing_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--total-copy-numbers", 
                                 "--input-allele-columns", "cn_a", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
@@ -173,7 +174,7 @@ def test_medicc_with_testing_example_total_copy_numbers():
 def test_medicc_with_testing_example_parallelization():
     "Testing small example"
     output_dir = 'examples/test_output_parallelization'
-    process = subprocess.Popen(['python', "medicc2", "examples/testing_example/testing_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--n-cores", "4", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
@@ -201,7 +202,7 @@ def test_medicc_with_testing_example_parallelization():
 def test_medicc_with_testing_example_parallelization():
     "Testing small example"
     output_dir = 'examples/test_output_parallelization'
-    process = subprocess.Popen(['python', "medicc2", "examples/testing_example/testing_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--n-cores", "4", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
@@ -229,7 +230,7 @@ def test_medicc_with_testing_example_parallelization():
 def test_medicc_with_testing_example_nowgd():
     "Testing small example"
     output_dir = 'examples/test_output_nowgd'
-    process = subprocess.Popen(['python', "medicc2", "examples/testing_example/testing_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--no-wgd", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
@@ -258,7 +259,7 @@ def test_medicc_with_testing_example_nowgd():
 def test_medicc_with_testing_example_WGD_x2():
     "Testing small example"
     output_dir = 'examples/test_output_wgd_x2'
-    process = subprocess.Popen(['python', "medicc2", "examples/testing_example/testing_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--wgd-x2", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
@@ -286,7 +287,7 @@ def test_medicc_with_testing_example_WGD_x2():
 def test_medicc_with_multiple_cores():
     "Testing small example"
     output_dir = 'examples/test_output_multiple_cores'
-    process = subprocess.Popen(['python', "medicc2", "examples/simple_example/simple_example.tsv", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/simple_example/simple_example.tsv", 
                                 output_dir, "--n-cores", "4", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
@@ -314,7 +315,7 @@ def test_medicc_with_multiple_cores():
 def test_medicc_with_OV03_04():
     "Testing testing example"
     output_dir = 'examples/test_output_OV03_04'
-    process = subprocess.Popen(['python', "medicc2", "examples/OV03-04/OV03-04_descr.txt", 
+    process = subprocess.Popen([sys.executable, "medicc2", "examples/OV03-04/OV03-04_descr.txt", 
                                 output_dir, "-i", "fasta", "--normal-name", "OV03-04_diploid",
                                 "--plot", "both", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
@@ -341,7 +342,7 @@ def test_medicc_with_OV03_04():
 def test_medicc_with_bootstrap():
     "Testing bootstrap workflow"
     output_dir = 'examples/test_output_bootstrap'
-    process = subprocess.Popen(['python', "medicc2",
+    process = subprocess.Popen([sys.executable, "medicc2",
                                 "examples/simple_example/simple_example.tsv",
                                 output_dir,
                                 "--bootstrap-nr", "5"],
@@ -368,7 +369,7 @@ def test_gundem_et_al_2015(patient, extra_condition):
     "Testing if running of all Gundem data works"
 
     output_dir = f"examples/test_output_{patient}"
-    command = ['python', "medicc2", f"examples/gundem_et_al_2015/{patient}_input_df.tsv", output_dir,
+    command = [sys.executable, "medicc2", f"examples/gundem_et_al_2015/{patient}_input_df.tsv", output_dir,
                "--events", "--chromosomes-bed", "default", "--regions-bed", "default"]
     if extra_condition == 'normal':
         pass
