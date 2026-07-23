@@ -1240,7 +1240,7 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
     # found so far — this is what gets returned, so plateau members discovered in
     # earlier sweeps are NOT lost when the worklist moves on.
     frontier = [(tree, ancestors, uppass_cache)]
-    solutions = list(frontier)
+    solutions = [(t, a) for t, a, _ in frontier]
 
     do_trace = nni_trace_dir is not None  # used as boolean sentinel; no files written here
     step_records = []  # list of (step, newick_str, score)
@@ -1333,7 +1333,7 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
             # A strictly better score supersedes the whole plateau found so far:
             # reset both the solution set and the worklist to the improving trees.
             frontier = _dedup_candidates(best_candidates)
-            solutions = list(frontier)
+            solutions = [(t, a) for t, a, _ in frontier]
             visited_hashes = set(get_topology_hash(t) for t, _, _ in frontier)
             trace.append(current_score)
             logger.info(
@@ -1354,7 +1354,7 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
                     f"co-optimal neighbor(s) at score {current_score}, terminating with "
                     f"{len(solutions)} co-optimal tree(s)")
                 break
-            solutions.extend(new_candidates)
+            solutions.extend((t, a) for t, a, _ in new_candidates)
             frontier = new_candidates
             visited_hashes.update(get_topology_hash(t) for t, _, _ in new_candidates)
             logger.info(
@@ -1383,8 +1383,8 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
             f"tree(s) at score {current_score}")
 
     return {
-        "best_trees": [t for t, _, _ in solutions],
-        "best_ancestors": [a for _, a, _ in solutions],
+        "best_trees": [t for t, _ in solutions],
+        "best_ancestors": [a for _, a in solutions],
         "trace": trace,
         "best_score": current_score,
         "step_records": step_records,
