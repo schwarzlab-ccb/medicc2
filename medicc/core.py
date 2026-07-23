@@ -413,8 +413,7 @@ def main_nni(input_df,
 
     nni_start: Starting tree for NNI search. One of 'nj' / 'neighbor-joining'
         (default) or 'random'. Ignored when input_tree is provided.
-    nni_trace_dir: If not None, write one file per evaluated NNI neighbor into
-        this directory, then aggregate into nni_trace.tsv.
+    nni_trace_dir: If not None, writes the NNI steps log into nni_trace.tsv.
     """
     symbol_table = asymm_fst.input_symbols()
 
@@ -533,29 +532,14 @@ def main_nni(input_df,
     plt.close()
 
     if nni_trace_dir is not None and step_records:
-        logger.info("NNI mode: Writing per-step trace files to %s", nni_trace_dir)
+        logger.info("NNI mode: Writing trace file to %s", nni_trace_dir)
         os.makedirs(nni_trace_dir, exist_ok=True)
-        # Per-step .txt files are the primary artifacts; nni_trace.tsv is aggregated from them for convenience.
-        for step, newick_str, score in step_records:
-            fname = os.path.join(nni_trace_dir, f"step_{step:08d}.txt")
-            with open(fname, "w") as f:
-                f.write(newick_str + "\n")
-                f.write(str(float(score)) + "\n")
-
-        logger.info("NNI mode: Aggregating trace files into nni_trace.tsv")
-        step_files = sorted(
-            f for f in os.listdir(nni_trace_dir) if f.startswith("step_") and f.endswith(".txt")
-        )
+        # Write one single tsv file for the trace 
         tsv_path = os.path.join(nni_trace_dir, "nni_trace.tsv")
         with open(tsv_path, "w") as tsv:
             tsv.write("step\tnewick\tsum_of_branch_length\n")
-            for fname in step_files:
-                step_num = int(fname[len("step_"):-len(".txt")])
-                with open(os.path.join(nni_trace_dir, fname)) as f:
-                    lines = f.read().strip().splitlines()
-                newick_str = lines[0]
-                score_str = lines[1]
-                tsv.write(f"{step_num}\t{newick_str}\t{score_str}\n")
+            for step, newick_str, score in sorted(step_records):
+                tsv.write(f"{step}\t{newick_str}\t{score}\n")
 
     return sample_labels, nj_tree, final_tree_l, output_df_l
 

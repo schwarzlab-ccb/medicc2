@@ -790,7 +790,8 @@ def test_nni_mode_step_records_empty_when_no_trace_dir():
 
 
 def test_main_nni_writes_trace_files():
-    """main_nni with nni_trace_dir writes per-step files and nni_trace.tsv."""
+    """main_nni with nni_trace_dir writes a single aggregated nni_trace.tsv and
+    NO per-step files (which previously exploded the inode count)."""
     import pathlib, tempfile, os
     import medicc
     import medicc.core as core
@@ -826,19 +827,22 @@ def test_main_nni_writes_trace_files():
             nni_trace_dir=trace_dir,
         )
 
-        step_files = sorted(f for f in os.listdir(trace_dir) if f.startswith("step_") and f.endswith(".txt"))
-        assert len(step_files) > 0, "No step files written"
+        # No per-neighbor step_*.txt files should be written anymore.
+        step_files = [f for f in os.listdir(trace_dir)
+                      if f.startswith("step_") and f.endswith(".txt")]
+        assert step_files == [], \
+            f"per-step files should no longer be written, found {len(step_files)}"
 
-        with open(os.path.join(trace_dir, step_files[0])) as f:
-            lines = f.read().strip().splitlines()
-        assert len(lines) == 2, f"Expected 2 lines in step file, got {len(lines)}"
-        float(lines[1])  # line 2 must be a parseable number
-
+        # The complete trace still lands in a single aggregated file.
         tsv_path = os.path.join(trace_dir, "nni_trace.tsv")
         assert os.path.exists(tsv_path), "nni_trace.tsv not written"
         tsv = pd.read_csv(tsv_path, sep="\t")
         assert list(tsv.columns) == ["step", "newick", "sum_of_branch_length"]
-        assert len(tsv) == len(step_files)
+        assert len(tsv) > 0, "trace should record at least one evaluated neighbor"
+        # rows monotonic in step, scores numeric, newicks non-empty
+        assert list(tsv["step"]) == sorted(tsv["step"].tolist()), "TSV rows not in step order"
+        assert tsv["sum_of_branch_length"].map(float).notna().all()
+        assert tsv["newick"].str.strip().str.endswith(";").all(), "newick column malformed"
         assert list(tsv["step"]) == sorted(tsv["step"].tolist()), "TSV rows not in step order"
 
 
