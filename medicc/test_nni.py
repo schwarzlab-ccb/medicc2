@@ -458,6 +458,70 @@ def test_nni_mode_strict_improvement_collapses_frontier():
         assert abs(score - result["best_score"]) < 1e-9
 
 
+def test_nni_mode_returns_full_plateau_two_cycle():
+    """Regression: on a 2-cycle plateau the frontier must NOT be discarded.
+
+    Landscape: the start tree T0 and exactly one of its NNI neighbours B share
+    the best score; every other tree scores strictly worse. T0 and B are each
+    other's only tied-best neighbour (a 2-cycle). The co-optimal set is {T0, B}.
+
+    The old plateau branch REPLACED the frontier each sweep, so it traversed
+    T0 -> B -> (back to T0, already visited) -> terminate, returning only {T0}
+    and silently dropping B. A correct plateau traversal must return BOTH.
+
+    Score landscape is mocked by topology hash so the test is deterministic and
+    independent of FST scoring details.
+    """
+    import medicc
+    import medicc.io
+    import medicc.core as core
+    import medicc.tools
+    import medicc.tree_hash as tree_hash
+    import medicc.nni as nni
+    from medicc.core import nni_mode
+    from unittest.mock import patch
+    import pandas as pd
+
+    fst = medicc.io.read_fst()
+    symbol_table = fst.input_symbols()
+
+    # 5 non-diploid samples -> n=5 leaves -> 4 NNI neighbours per tree.
+    profiles = {"diploid": "1" * 6, "s1": "2" * 6, "s2": "3" * 6,
+                "s3": "4" * 6, "s4": "5" * 6, "s5": "6" * 6}
+    rows = []
+    for sample, prof in profiles.items():
+        for i, cn in enumerate(prof):
+            rows.append({"sample_id": sample, "chrom": "chr1",
+                         "start": i, "end": i + 1, "cn_a": cn})
+    df = pd.DataFrame(rows).set_index(["sample_id", "chrom", "start", "end"])
+    df["cn_a"] = df["cn_a"].astype("category")
+    fsa_dict, _ = core.create_standard_fsa_dict_from_data(df, symbol_table, "X")
+
+    start_tree = _make_search_shape_tree(5)
+    # B := the first NNI neighbour of the start tree
+    B = list(nni.nni_neighbors(start_tree))[0][0]
+    h0 = tree_hash.get_topology_hash(start_tree)
+    hB = tree_hash.get_topology_hash(B)
+    assert h0 != hB
+    plateau = {h0, hB}
+
+    def fake_score(tree):
+        # T0 and B tied-best (0.0); everything else strictly worse (1.0)
+        return 0.0 if tree_hash.get_topology_hash(tree) in plateau else 1.0
+
+    with patch("medicc.tools.sum_of_branch_length", side_effect=fake_score):
+        result = nni_mode(
+            tree=start_tree, samples_dict=fsa_dict, fst=fst,
+            normal_name="diploid", prune_weight=0,
+            nni_max_iter=50, n_cores=None)
+
+    returned = {tree_hash.get_topology_hash(t) for t in result["best_trees"]}
+    assert returned == {h0, hB}, (
+        f"plateau traversal must return BOTH co-optimal trees {{{h0[:8]}, {hB[:8]}}}, "
+        f"got {{{', '.join(h[:8] for h in returned)}}}")
+    assert len(result["best_trees"]) == len(result["best_ancestors"])
+
+
 def test_nni_parallel_matches_serial():
     """evaluate_nni_neighbors_parallel must return the same scores as the serial
     nni_neighbors path, and cover the same set of neighbor topologies."""

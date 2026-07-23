@@ -1192,12 +1192,21 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
 
     At each sweep: enumerate all NNI neighbors of every tree in the current
     frontier, evaluate each via incremental ancestor reconstruction, and accept
-    the globally best set:
-      - If the best score strictly improves on current: replace the frontier
-        with the single best neighbor (or all tied-best if multiple share it).
-      - If the best score equals current: expand the frontier with all tied-best
-        neighbors (plateau traversal — do not terminate yet).
-      - If no neighbor improves or ties: terminate at an NNI-local optimum.
+    the globally best set. Two collections are maintained: `solutions` (every
+    distinct co-optimal tree found — the return value) and `frontier` (the
+    worklist of trees still to expand):
+      - If the best score strictly improves on current: a better optimum has
+        been found, so reset BOTH solutions and frontier to the improving
+        tied-best neighbors.
+      - If the best score equals current (plateau): add every newly-discovered
+        tied-best neighbor to solutions and enqueue only those new trees for
+        expansion (already-seen trees are not re-expanded). Do not terminate.
+      - If no neighbor improves or ties: terminate at an NNI-local optimum,
+        returning the full accumulated `solutions` plateau.
+
+    Terminating a plateau no longer discards co-optimal trees found in earlier
+    sweeps — best_trees is the complete traversed co-optimal set, not just the
+    last sweep's frontier.
 
     Stop when a full sweep produces no improvement/tie, or nni_max_iter total
     neighbor trees have been evaluated.
@@ -1242,8 +1251,12 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
     trace = [current_score]
     logger.info(f"NNI mode: initial score = {current_score}")
 
-    # Frontier: list of (tree, ancestors, uppass_cache) tuples
+    # frontier: worklist of (tree, ancestors, uppass_cache) tuples still to be
+    # expanded this sweep. solutions: every distinct co-optimal (best-score) tree
+    # found so far — this is what gets returned, so plateau members discovered in
+    # earlier sweeps are NOT lost when the worklist moves on.
     frontier = [(tree, ancestors, uppass_cache)]
+    solutions = list(frontier)
 
     do_trace = nni_trace_dir is not None  # used as boolean sentinel; no files written here
     step_records = []  # list of (step, newick_str, score)
@@ -1252,8 +1265,7 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
 
     sweep = 0
     hit_cap = False
-    frontier_hashes = frozenset(get_topology_hash(t) for t, _, _ in frontier)
-    visited_hashes = set(frontier_hashes)  # all topology hashes ever in the frontier
+    visited_hashes = set(get_topology_hash(t) for t, _, _ in frontier)  # every topology ever enqueued
     while True:
         best_score = None
         best_candidates = []  # list of (tree, ancestors, uppass_cache)
@@ -1334,9 +1346,11 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
         if best_score < current_score:
             previous_score = current_score
             current_score = best_score
+            # A strictly better score supersedes the whole plateau found so far:
+            # reset both the solution set and the worklist to the improving trees.
             frontier = _dedup_candidates(best_candidates)
-            frontier_hashes = frozenset(get_topology_hash(t) for t, _, _ in frontier)
-            visited_hashes = set(frontier_hashes)  # reset visited on improvement
+            solutions = list(frontier)
+            visited_hashes = set(get_topology_hash(t) for t, _, _ in frontier)
             trace.append(current_score)
             logger.info(
                 f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
@@ -1344,27 +1358,32 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
                 f"{previous_score} -> {current_score} "
                 f"({len(frontier)} unique tied-best neighbor(s), {len(best_candidates)} before dedup)")
         elif best_score == current_score:
-            frontier = _dedup_candidates(best_candidates)
-            new_frontier_hashes = frozenset(get_topology_hash(t) for t, _, _ in frontier)
-            if new_frontier_hashes.issubset(visited_hashes):
+            # Plateau: keep every co-optimal tree found so far (solutions) and
+            # only enqueue the newly-discovered ones for further expansion.
+            # Terminate once a sweep surfaces no co-optimal tree we haven't seen.
+            new_candidates = [c for c in _dedup_candidates(best_candidates)
+                              if get_topology_hash(c[0]) not in visited_hashes]
+            if not new_candidates:
                 logger.info(
                     f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
-                    f"{len(frontier)} frontier tree(s), plateau exhausted — all "
-                    f"{len(frontier)} neighbor(s) already visited at score {current_score}, terminating")
+                    f"{len(frontier)} frontier tree(s), plateau exhausted — no new "
+                    f"co-optimal neighbor(s) at score {current_score}, terminating with "
+                    f"{len(solutions)} co-optimal tree(s)")
                 break
-            visited_hashes.update(new_frontier_hashes)
-            frontier_hashes = new_frontier_hashes
+            solutions.extend(new_candidates)
+            frontier = new_candidates
+            visited_hashes.update(get_topology_hash(t) for t, _, _ in new_candidates)
             logger.info(
                 f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
-                f"{len(frontier)} frontier tree(s), plateau — expanding frontier to "
-                f"{len(frontier)} unique equally-good neighbor(s) at score {current_score} "
-                f"({len(best_candidates)} before dedup)")
+                f"{len(frontier)} frontier tree(s), plateau — added "
+                f"{len(new_candidates)} new co-optimal tree(s) at score {current_score} "
+                f"(total {len(solutions)}; {len(best_candidates)} before dedup)")
         else:
             logger.info(
                 f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
                 f"{len(frontier)} frontier tree(s), no improvement "
                 f"(best neighbor = {best_score}, current = {current_score}), "
-                f"terminating at NNI-local optimum")
+                f"terminating at NNI-local optimum with {len(solutions)} co-optimal tree(s)")
             break
 
         sweep += 1
@@ -1376,12 +1395,12 @@ def nni_mode(tree, samples_dict, fst, normal_name="diploid", prune_weight=0,
     if hit_cap:
         logger.warning(
             f"NNI mode: reached nni_max_iter={nni_max_iter} total neighbors evaluated "
-            f"without converging — hard cap hit; returning current frontier of "
-            f"{len(frontier)} tree(s) at score {current_score}")
+            f"without converging — hard cap hit; returning {len(solutions)} co-optimal "
+            f"tree(s) at score {current_score}")
 
     return {
-        "best_trees": [t for t, _, _ in frontier],
-        "best_ancestors": [a for _, a, _ in frontier],
+        "best_trees": [t for t, _, _ in solutions],
+        "best_ancestors": [a for _, a, _ in solutions],
         "trace": trace,
         "best_score": current_score,
         "step_records": step_records,
