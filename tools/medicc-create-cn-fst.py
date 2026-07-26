@@ -21,6 +21,8 @@ parser.add_argument("--max-num-wgds", type=int, required=False, default=3, help=
 parser.add_argument("--prefix", "-p", action='store', required=False, default='fst')
 parser.add_argument("--write-symbol-table", action='store_true', required=False, default=False)
 parser.add_argument("--legacy-loh", action='store_true', required=False, default=False)
+parser.add_argument("--length-encoding", action='store_true', required=False, default=False) # when true create the length encoding version of the respective FST.
+parser.add_argument("--length-encoding-open-weight", type=int, required=False, default=5000, help="Length encoding event open score (Default: 5000)")
 args = parser.parse_args()
 
 separator = args.sep
@@ -33,7 +35,8 @@ logger.info('Creating FSTs.')
 fst = medicc.create_copynumber_fst(symbol_table=symbol_table, sep=separator, 
                                    enable_wgd=args.wgd, max_num_wgds=args.max_num_wgds,
                                    wgd_x2=args.wgd_x2, total_cn=args.total_cn,
-                                   exact_nowgd=not args.legacy_loh)
+                                   exact_nowgd=not args.legacy_loh, length_encoding=args.length_encoding,
+                                   length_encoding_open_weight=args.length_encoding_open_weight)
 logger.info('FST: %d states.', fst.num_states())
 
 logger.info('Writing.')
