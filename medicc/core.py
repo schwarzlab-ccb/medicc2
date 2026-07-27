@@ -74,15 +74,17 @@ def main(input_df,
 
         pairwise_distances = pd.DataFrame(0, columns=FSA_dict.keys(), index=FSA_dict.keys())
 
-        assert len([x for x in list(input_tree.find_clades()) if x.name is not None and 'internal' not in x.name]) == \
-            len(np.unique(input_df.index.get_level_values('sample_id'))), \
-                "Number of samples differs in input tree and input dataframe"
-        assert np.all(
-            np.sort([x.name for x in list(input_tree.find_clades()) if x.name is not None and 'internal' not in x.name]) ==
-            np.sort(np.unique(input_df.index.get_level_values('sample_id')))), (
-                "Input tree does not match input dataframe: "
-                f"{np.sort([x.name for x in list(input_tree.find_clades()) if x.name is not None and 'internal' not in x.name])}\n"
-                f"{np.sort(np.unique(input_df.index.get_level_values('sample_id')))}")
+        tree_leaves = [x.name for x in list(input_tree.find_clades())
+                       if x.name is not None and 'internal' not in x.name and x.name != normal_name]
+        df_samples = np.unique(input_df.index.get_level_values('sample_id'))[1:]
+
+        assert len(tree_leaves) == len(df_samples), \
+            "Number of samples differs in input tree and input dataframe"
+
+        assert np.all(np.sort(tree_leaves) == np.sort(df_samples)), (
+            "Input tree does not match input dataframe: "
+            f"{np.sort(tree_leaves)}\n"
+            f"{np.sort(df_samples)}")
         
         # necessary for the way that reconstruct_ancestors is performed
         if ancestral_reconstruction:
