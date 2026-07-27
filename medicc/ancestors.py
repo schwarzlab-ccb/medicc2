@@ -192,6 +192,78 @@ def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, lower_pass_fst, no
     else:
         return fsa_dict, uppass_cache
 
+def reconstruct_ancestors_incremental(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name, prune_weight, old_uppass_cache, nni_move):
+    """
+    incremental reconstruction of ancestors after a single NNI move.
+    Only the affected dirty nodes' candidates (up the tree) fsas are reconstructed.
+    """
+    def __build_parent_of_and_clade_loop_up_table(tree, normal_name):
+        parent_of = {}
+        clade_look_up_table = {}
+        for clade in tree.find_clades(order="preorder"):
+            clade_look_up_table[clade.name] = clade
+            for child in clade.clades:
+                if child.name != normal_name:
+                    parent_of[child.name] = clade.name
+        return parent_of, clade_look_up_table
+
+    def __dirty_node_list(parent_of, v_name, normal_name, clade_look_up_table):
+        dirty = []
+        node_name = v_name
+        while node_name is not None and node_name != normal_name:
+            dirty.append(clade_look_up_table[node_name])
+            node_name = parent_of[node_name]
+        return dirty
+
+    # Get the dirty nodes (from v_name to root)
+    parent_of, clade_look_up_table = __build_parent_of_and_clade_loop_up_table(tree, normal_name)
+    dirty_nodes_l = __dirty_node_list(parent_of, nni_move.v_name, normal_name, clade_look_up_table)
+
+    fsa_dict = old_uppass_cache | samples_dict
+    clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
+
+    logger.debug("Incremental ancestral reconstuction: Up the tree for only the dirty nodes")
+    for node in dirty_nodes_l:
+        children = [item for item in node.clades if item.name != normal_name]
+        left_name = children[0].name
+        right_name = children[1].name
+        logger.debug(f"Clade: {node.name}, left: {left_name}, right: {right_name}")
+
+        ## project
+        intersection = intersect_clades_detmin(fsa_dict[left_name], fsa_dict[right_name], upper_pass_fst,
+                                               prune_weight=prune_weight, detmin_before_intersect=False,
+                                               detmin_after_intersect=True)
+        fsa_dict[node.name] = intersection
+
+    new_uppass_cache = {node.name: fsa_dict[node.name] for node in clade_list if len(node.clades) != 0}
+
+    logger.debug("Incremental ancestral reconstuction for root")
+    # root node is calculated separately w.r.t. normal node
+    root_name = clade_list[0].name
+    sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
+    fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
+
+    logger.info("Incremental ancestral reconstuction: Down the tree")
+    # down the tree (root to leaf)
+    for node in clade_list:
+        if len(node.clades) != 0:
+            children = [q for q in node.clades if len(q.clades) != 0]
+            logger.debug(f"Clade: {node.name}, internal children: {children}")
+            for child in children:
+                sp = fstlib.align(lower_pass_fst, fsa_dict[node.name], fsa_dict[child.name])
+                fsa_dict[child.name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
+
+    # check if ancestors were correctly reconstructed
+    sample_lengths = {sample: len(medicc.tools.fsa_to_string(fsa_dict[sample])) for sample, fsa in fsa_dict.items()}
+    normal_length = sample_lengths[normal_name]
+
+    if np.any([x != normal_length for x in sample_lengths.values()]):
+        raise MEDICCAncestorReconstructionError("Some ancestors could not be reconstructed. These are:\n"
+                                                "{}".format('\n'.join([sample for sample, length in sample_lengths.items() if length != normal_length])) + \
+                                                "\nCheck whether your normal sample contains segments with copy number zero")
+    return fsa_dict, new_uppass_cache
+
+
 
 def intersect_clades_detmin(left, right, fst, prune_weight=None, detmin_before_intersect=True, detmin_after_intersect=True):
     L = fstlib.compose(fst, left.arcsort('ilabel')).project('input')

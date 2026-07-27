@@ -96,3 +96,42 @@ def test_reconstruct_ancestors_parallel_matches_serial(n_cores):
         _fresh_tree(), SAMPLES_DICT, FST, FST, NORMAL, n_cores=n_cores)
     assert _decode_all(result) == _decode_all(baseline)
 
+
+def _incremental_matches_full(move):
+    source_tree = _fresh_tree()
+
+    # Full reconstruction on the pre-swap tree, keeping the pre-down-pass uppass cache
+    _, old_uppass_cache = medicc.reconstruct_ancestors(
+        source_tree, SAMPLES_DICT, FST, FST, NORMAL, upper_cache=True)
+
+    new_tree = medicc.nni._apply_nni_swap(
+        source_tree, move.u_name, move.v_name, move.A_name, move.swap_target_name)
+
+    incremental_result, incremental_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+        new_tree, SAMPLES_DICT, FST, FST, NORMAL, prune_weight=0,
+        old_uppass_cache=old_uppass_cache, nni_move=move)
+
+    full_result, full_cache = medicc.reconstruct_ancestors(
+        new_tree, SAMPLES_DICT, FST, FST, NORMAL, upper_cache=True)
+
+    assert _decode_all(incremental_result) == _decode_all(full_result)
+    assert _decode_all(incremental_cache) == _decode_all(full_cache)
+
+
+def test_reconstruct_ancestors_incremental_matches_full_reconstruction_shallow_swap():
+    # u=I1, v=I3, A=I4, swap_target=B: dirty chain is {I3, I1}, I2/I4/I5/I6 reused from cache
+    move = medicc.nni._NNIMove(u_name="I1", v_name="I3", A_name="I4", swap_target_name="B")
+    _incremental_matches_full(move)
+
+
+def test_reconstruct_ancestors_incremental_matches_full_reconstruction_other_side():
+    # mirror move on the other subtree: u=I2, v=I5, A=I6, swap_target=F
+    move = medicc.nni._NNIMove(u_name="I2", v_name="I5", A_name="I6", swap_target_name="F")
+    _incremental_matches_full(move)
+
+
+def test_reconstruct_ancestors_incremental_matches_full_reconstruction_other_swap_target():
+    # same edge (I1, I3) as the first test, but the other of v's two children as swap_target
+    move = medicc.nni._NNIMove(u_name="I1", v_name="I3", A_name="I4", swap_target_name="A")
+    _incremental_matches_full(move)
+

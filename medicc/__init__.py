@@ -12,6 +12,7 @@ import medicc.sim
 import medicc.stats
 import medicc.tools
 import medicc.tree_hash
+import medicc.nni
 from medicc.ancestors import reconstruct_ancestors
 from medicc.core import *
 from medicc.factory import *
