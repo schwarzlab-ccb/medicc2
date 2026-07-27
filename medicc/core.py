@@ -99,7 +99,9 @@ def main(input_df,
                                                  upper_pass_fst=asymm_upper_fst,
                                                  lower_pass_fst=asymm_lower_fst,
                                                  normal_name=normal_name,
-                                                 prune_weight=prune_weight)
+                                                 prune_weight=prune_weight,
+                                                 n_cores=n_cores,
+                                                 upper_cache=False)
 
         ## Create and write output data frame with ancestors
         logger.info("Creating output copynumbers.")
