@@ -11,6 +11,7 @@ import medicc.plot
 import medicc.sim
 import medicc.stats
 import medicc.tools
+import medicc.tree_hash
 from medicc.ancestors import reconstruct_ancestors
 from medicc.core import *
 from medicc.factory import *
