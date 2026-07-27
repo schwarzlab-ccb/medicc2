@@ -9,7 +9,10 @@ import medicc
 
 logger = logging.getLogger(__name__)
 
-def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0):
+def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name, prune_weight=0):
+    '''
+    Reconstruct ancestors using upper fst for traversing up the tree and lower fst to traverse down the tree.
+    '''
 
     if len(samples_dict) == 2:
         return samples_dict
@@ -28,14 +31,14 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0):
             logger.debug(f"Clade: {node.name}, left: {left_name}, right: {right_name}")
 
             ## project
-            intersection = intersect_clades_detmin(fsa_dict[left_name], fsa_dict[right_name], fst, 
+            intersection = intersect_clades_detmin(fsa_dict[left_name], fsa_dict[right_name], upper_pass_fst,
                                                    prune_weight=prune_weight, detmin_before_intersect=False, detmin_after_intersect=True)
             fsa_dict[node.name] = intersection
 
     logger.debug("Ancestor reconstruction for root")
     # root node is calculated separately w.r.t. normal node
     root_name = clade_list[0].name 
-    sp = fstlib.align(fst, fsa_dict[normal_name], fsa_dict[root_name])
+    sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
     fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
     logger.info("Ancestor reconstruction: Down the tree")
@@ -45,7 +48,7 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0):
             children = [q for q in node.clades if len(q.clades) != 0]
             logger.debug(f"Clade: {node.name}, internal children: {children}")
             for child in children:
-                sp = fstlib.align(fst, fsa_dict[node.name], fsa_dict[child.name])
+                sp = fstlib.align(lower_pass_fst, fsa_dict[node.name], fsa_dict[child.name])
                 fsa_dict[child.name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
     # check if ancestors were correctly reconstructed

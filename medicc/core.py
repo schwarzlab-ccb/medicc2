@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 def main(input_df,
-         asymm_fst,
+         asymm_upper_fst,
+         asymm_lower_fst,
          normal_name='diploid',
          input_tree=None,
          ancestral_reconstruction=True,
@@ -32,7 +33,12 @@ def main(input_df,
          reconstruct_events=False):
     """ MEDICC Main Method """
 
-    symbol_table = asymm_fst.input_symbols()
+    symbol_upper_table = asymm_upper_fst.input_symbols()
+    symbol_lower_table = asymm_lower_fst.input_symbols()
+    if dict(symbol_upper_table) != dict(symbol_lower_table):
+        raise MEDICCError("Upper-pass and lower-pass FSTs use incompatible input symbol tables.")
+
+    symbol_table = asymm_upper_fst.input_symbols()
 
     ## Validate input
     logger.info("Validating input.")
@@ -48,10 +54,10 @@ def main(input_df,
         ## Calculate pairwise distances
         logger.info("Calculating pairwise distance matrices")
         if n_cores is not None and n_cores > 1:
-            pairwise_distances = parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict,
+            pairwise_distances = parallelization_calc_pairwise_distance(sample_labels, asymm_upper_fst, CN_str_dict,
                                                                                     n_cores)
         else:
-            pairwise_distances = calc_pairwise_distance_matrix(asymm_fst, CN_str_dict)
+            pairwise_distances = calc_pairwise_distance_matrix(asymm_upper_fst, CN_str_dict)
 
         if (pairwise_distances == np.inf).any().any():
             affected_pairs = [(pairwise_distances.index[s1], pairwise_distances.index[s2])
@@ -90,7 +96,8 @@ def main(input_df,
         logger.info("Reconstructing ancestors.")
         ancestors = medicc.reconstruct_ancestors(tree=final_tree,
                                                  samples_dict=FSA_dict,
-                                                 fst=asymm_fst,
+                                                 upper_pass_fst=asymm_upper_fst,
+                                                 lower_pass_fst=asymm_lower_fst,
                                                  normal_name=normal_name,
                                                  prune_weight=prune_weight)
 
@@ -100,7 +107,7 @@ def main(input_df,
 
         ## Update branch lengths with ancestors
         logger.info("Updating branch lengths of final tree using ancestors.")
-        update_branch_lengths(final_tree, asymm_fst, ancestors, normal_name)
+        update_branch_lengths(final_tree, asymm_upper_fst, ancestors, normal_name)
     else:
         output_df = input_df.copy()
 

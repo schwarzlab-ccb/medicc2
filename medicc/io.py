@@ -75,10 +75,10 @@ def read_fst(user_fst=None, no_wgd=False, n_wgd=None, total_copy_numbers=False, 
     """Simple wrapper for loading the FST using the fstlib read function. """
 
     objects_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "objects")
-    if length_encoding:
+    if length_encoding and user_fst is None:
         if n_wgd is not None and n_wgd != 1:
             raise ValueError("Currently only 1 WGD event is supported for length encoding.")
-        if n_wgd is None and (not no_wgd):
+        if not no_wgd:
             print("WARNING: n_wgd is silently changed to 1 because only 1 WGD event is supported for length encoding")
             n_wgd = 1
 

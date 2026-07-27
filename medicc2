@@ -47,6 +47,11 @@ parser.add_argument("--topology-only", "-s",
                     dest="topology_only",
                     help="Output only tree topology, without reconstructing ancestors (default: False).",
                     required=False)
+parser.add_argument("--length-aware-ancestors", "-la-ancestors",
+                    action="store_true",
+                    dest="length_aware_ancestors",
+                    default=False,
+                    help="Use the matched event-counting FST for the upper pass and length-encoding FST for lower-pass ancestral selection. NJ distances and reported branch lengths remain event-counted.")
 parser.add_argument("--normal-name", "-n",
                     default="diploid",
                     type=str,
@@ -132,7 +137,11 @@ parser.add_argument("--prune-weight", type=int, dest='prune_weight', default=0,
                     help='''Expert option: Prune weight in ancestor reconstruction. Values >0 might
                             result in more accurate ancestors but will require more time and memory. Default: 0''')
 parser.add_argument("--fst", type=str, dest='fst', default=None,
-                    help='Expert option: path to an alternative FST.')
+                    help='Expert option: path to an alternative FST. Warning: this option is deprecated, to maintain the same behavior replace --fst File to --upper-fst File --lower-fst File')
+parser.add_argument("--upper-fst", type=str, dest='upper_fst', default=None,
+                    help='Expert option: path to an alternative upper FST.')
+parser.add_argument("--lower-fst", type=str, dest='lower_fst', default=None,
+                    help='Expert option: path to an alternative lower FST.')
 parser.add_argument("--fst-chr-separator", type=str, dest='fst_chr_separator', default='X',
                     help = 'Expert option: character used to separate chromosomes in the FST (default: \"X\").')
 parser.add_argument("--wgd-x2", action='store_true', default=False, dest='wgd_x2',
@@ -163,10 +172,70 @@ else:
 
 # Read in symbol table and transducers
 logger.info("Reading FST.")
-fst = medicc.io.read_fst(user_fst=args.fst, 
-                         no_wgd=args.no_wgd,
-                         total_copy_numbers=args.total_copy_numbers,
-                         wgd_x2=args.wgd_x2)
+# FST logic handling
+has_upper_fst = args.upper_fst is not None
+has_lower_fst = args.lower_fst is not None
+
+if has_upper_fst != has_lower_fst:
+    parser.error("--upper-fst and --lower-fst must be specified together.")
+
+has_custom_pair = has_upper_fst and has_lower_fst
+
+selected_fst_modes = sum([
+    args.fst is not None,
+    has_custom_pair,
+    args.length_aware_ancestors,
+])
+
+if selected_fst_modes > 1:
+    parser.error("--fst, the --upper-fst/--lower-fst pair and "
+                 "--length-aware-ancestors are mutually exclusive.")
+
+if args.fst is not None:
+    logging.warning("Warning: fst flag is deprecated, to maintain the same behavior replace --fst File with --upper-fst File and --lower-fst File.")
+    upper_fst_path = args.fst
+    upper_pass_fst = medicc.io.read_fst(user_fst=upper_fst_path,
+                                        no_wgd=args.no_wgd,
+                                        total_copy_numbers=args.total_copy_numbers,
+                                        wgd_x2=args.wgd_x2,
+                                        length_encoding=False)
+    lower_pass_fst = upper_pass_fst
+elif has_custom_pair:
+    upper_fst_path = args.upper_fst
+    lower_fst_path = args.lower_fst
+    upper_pass_fst = medicc.io.read_fst(user_fst=upper_fst_path,
+                                        no_wgd=args.no_wgd,
+                                        total_copy_numbers=args.total_copy_numbers,
+                                        wgd_x2=args.wgd_x2,
+                                        length_encoding=False)
+    lower_pass_fst = medicc.io.read_fst(user_fst=lower_fst_path,
+                                        no_wgd=args.no_wgd,
+                                        total_copy_numbers=args.total_copy_numbers,
+                                        wgd_x2=args.wgd_x2,
+                                        length_encoding=True)
+elif args.length_aware_ancestors:
+    upper_fst_path = None
+    lower_fst_path = None
+    upper_pass_fst = medicc.io.read_fst(user_fst=upper_fst_path,
+                                        no_wgd=args.no_wgd,
+                                        total_copy_numbers=args.total_copy_numbers,
+                                        wgd_x2=args.wgd_x2,
+                                        length_encoding=False)
+    lower_pass_fst = medicc.io.read_fst(user_fst=lower_fst_path,
+                                        no_wgd=args.no_wgd,
+                                        total_copy_numbers=args.total_copy_numbers,
+                                        wgd_x2=args.wgd_x2,
+                                        length_encoding=True)
+else:
+    upper_fst_path = None
+    lower_fst_path = None
+    upper_pass_fst = medicc.io.read_fst(user_fst=upper_fst_path,
+                                        no_wgd=args.no_wgd,
+                                        total_copy_numbers=args.total_copy_numbers,
+                                        wgd_x2=args.wgd_x2,
+                                        length_encoding=False)
+    lower_pass_fst = upper_pass_fst
+
 
 if args.user_tree is not None:
     logger.info("Importing user tree.")
@@ -205,7 +274,8 @@ if args.n_cores is not None:
 logger.info("Running main reconstruction routine.")
 sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df = medicc.main(
     input_df=input_df,
-    asymm_fst=fst,
+    asymm_upper_fst=upper_pass_fst,
+    asymm_lower_fst=lower_pass_fst,
     normal_name=normal_name,
     input_tree=input_tree, 
     ancestral_reconstruction=not args.topology_only,

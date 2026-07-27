@@ -132,7 +132,8 @@ def _single_bootstrap_run(input_df, fst, bootstrap_method, i, N_bootstrap, norma
     cur_df = bootstrap_method(input_df)
     _, _, _, cur_final_tree, _, _ = main(
         input_df=cur_df,
-        asymm_fst=fst,
+        asymm_upper_fst=fst,
+        asymm_lower_fst=fst,
         normal_name=normal_name,
         input_tree=None,
         ancestral_reconstruction=False,
