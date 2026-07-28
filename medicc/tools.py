@@ -147,3 +147,7 @@ def create_diploid_fsa(fst, total_copy_numbers=False):
     diploid_fsa.add_arc(0, ('X', 'X', 0, 0))
 
     return diploid_fsa
+
+def sum_of_branch_length(tree):
+    '''Calculate the sum of all branch lengths in the tree'''
+    return sum([clade.branch_length for clade in tree.find_clades() if clade.branch_length is not None])

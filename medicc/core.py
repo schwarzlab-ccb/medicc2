@@ -10,10 +10,11 @@ import numpy as np
 import pandas as pd
 
 import medicc
+import medicc.nni
 from medicc import io, nj, tools, event_reconstruction
+from medicc.tree_hash import get_topology_hash
 
-
-# prepare logger 
+# prepare logger
 logger = logging.getLogger(__name__)
 
 
@@ -515,6 +516,251 @@ def detect_wgd(input_df, sample, total_cn=False, wgd_x2=False, n_wgd=None):
     distance_no_wgd = float(fstlib.score(no_wgd_fst, diploid_fsa, fsa_dict[sample]))
 
     return distance_wgd < distance_no_wgd
+
+def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="diploid", prune_weight=0,
+             nni_max_iter=20000, n_cores=None, nni_trace_dir=None):
+    """
+    Iterated steepest-ascent NNI hill-climbing with plateau traversal
+
+    At each sweep: enumerate all NNI neighbors of every tree in the currrent frontier, evluate each via incremental
+    ancesotr reconstruction, and accept the globally best set.
+
+    Stop when a full sweep produces no improvement/tie, or nni_max_iter (maximum number of trees explored) is reached.
+
+    Returns:
+        dict with kes: best_trees (list of trees at optimum), best_ancestors (list of ancestors at optimum),
+        trace (list of scores, one entry per accepted iteration starting from initial), best_score (final score),
+        step_records (list of (step, newick_str, score) tuples, empty when nni_trace_dir is None)
+    """
+
+    def _dedup_candidates(candidates):
+        seen = set()
+        result = []
+        for t, anc, cache in candidates:
+            h = get_topology_hash(t)
+            if h not in seen:
+                seen.add(h)
+                result.append((t, anc, cache))
+        return result
+
+    assert tree.root.name == normal_name, "nni_mode expects a search-shape tree (root.name == normal_name)"
+
+    # Initial full reconstruction
+    ancestors, uppass_cache = medicc.ancestors.reconstruct_ancestors(tree=tree,
+                                                                     samples_dict=samples_dict,
+                                                                     upper_pass_fst=upper_pass_fst,
+                                                                     lower_pass_fst=lower_pass_fst,
+                                                                     normal_name=normal_name,
+                                                                     prune_weight=prune_weight,
+                                                                     n_cores=n_cores, upper_cache=True)
+    update_branch_lengths(tree, lower_pass_fst, ancestors, normal_name)
+    current_score = medicc.tools.sum_of_branch_length(tree)
+    trace = [current_score]
+    logger.info(f"NNI mode: initial score = {current_score}")
+
+    frontier = [(tree, ancestors, uppass_cache)] # trees still to be expanded in the coming sweep
+    solutions = [(t, a) for t, a, _ in frontier] # current best solutions
+    solutions_hash = set(get_topology_hash(t) for t, a in solutions)
+
+    do_trace = nni_trace_dir is not None
+    step_records = []; step_offset = 0
+
+    sweep = 0
+    max_nni_reached = False
+    visited_solutions =  {}
+    visited_solutions[get_topology_hash(tree)] = current_score # cache solutions we have already seen
+
+    while True:
+        best_score = None
+        best_candidates = []
+        best_candidates_hash = set()
+        n_evaluated = 0
+
+        use_parallel = n_cores is not None and n_cores > 1
+        for current_tree, current_ancestors, current_uppass_cache in frontier:
+            if use_parallel:
+                n_moves = len(medicc.nni._enumerate_moves(current_tree))
+                step_start = step_offset
+                step_offset += n_moves
+
+                neighbor_results = medicc.nni.evaluate_nni_neighbors_parallel(
+                    tree=current_tree,
+                    old_uppass_cache=current_uppass_cache,
+                    samples_dict=samples_dict,
+                    normal_name=normal_name,
+                    prune_weight=prune_weight,
+                    n_cores=n_cores,
+                    upper_pass_fst=upper_pass_fst,
+                    lower_pass_fst=lower_pass_fst,
+                    visited_solutions=visited_solutions,
+                    step_start=step_start,
+                )
+                for neighbor_tree, new_ancestors, new_uppass_cache, score, step, nni_move in neighbor_results:
+                    if new_ancestors is not None:
+                        visited_solutions[get_topology_hash(neighbor_tree)] = score
+
+                    n_evaluated += 1
+                    if do_trace:
+                        step_records.append((step, medicc.tree_hash.get_canonical_newick(neighbor_tree), score))
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        if new_ancestors is None:
+                            new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                                tree=neighbor_tree,
+                                samples_dict=samples_dict,
+                                upper_pass_fst=upper_pass_fst,
+                                lower_pass_fst=lower_pass_fst,
+                                normal_name=normal_name,
+                                prune_weight=prune_weight,
+                                old_uppass_cache=current_uppass_cache,
+                                nni_move=nni_move,
+                            )
+                        best_candidates = [(neighbor_tree, new_ancestors, new_uppass_cache)]
+                    elif score == best_score:
+                        if new_ancestors is None:
+                            new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                                tree=neighbor_tree,
+                                samples_dict=samples_dict,
+                                upper_pass_fst=upper_pass_fst,
+                                lower_pass_fst=lower_pass_fst,
+                                normal_name=normal_name,
+                                prune_weight=prune_weight,
+                                old_uppass_cache=current_uppass_cache,
+                                nni_move=nni_move,
+                            )
+                        best_candidates.append((neighbor_tree, new_ancestors, new_uppass_cache))
+            else:
+                # single thread
+                n_moves = len(medicc.nni._enumerate_moves(current_tree))
+                step_start = step_offset
+                step_offset += n_moves
+
+                for i, (neighbor_tree, nni_move) in enumerate(medicc.nni.nni_neighbors(current_tree)):
+                    n_evaluated += 1
+                    neighbor_tree_hash = get_topology_hash(neighbor_tree)
+                    hash_hit = False
+                    if neighbor_tree_hash in visited_solutions:
+                        score = visited_solutions[neighbor_tree_hash]
+                        hash_hit = True
+                    else:
+                        new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                            tree=neighbor_tree,
+                            samples_dict=samples_dict,
+                            upper_pass_fst=upper_pass_fst,
+                            lower_pass_fst=lower_pass_fst,
+                            normal_name=normal_name,
+                            prune_weight=prune_weight,
+                            old_uppass_cache=current_uppass_cache,
+                            nni_move=nni_move,
+                        )
+                        update_branch_lengths(neighbor_tree, lower_pass_fst, new_ancestors, normal_name)
+                        score = medicc.tools.sum_of_branch_length(neighbor_tree)
+                        visited_solutions[neighbor_tree_hash] = score
+                    step = step_start + i
+                    if do_trace:
+                        step_records.append((step, medicc.tree_hash.get_canonical_newick(neighbor_tree), score))
+                    if best_score is None or score < best_score:
+                        best_score = score
+                        if hash_hit:
+                            new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                                tree=neighbor_tree,
+                                samples_dict=samples_dict,
+                                upper_pass_fst=upper_pass_fst,
+                                lower_pass_fst=lower_pass_fst,
+                                normal_name=normal_name,
+                                prune_weight=prune_weight,
+                                old_uppass_cache=current_uppass_cache,
+                                nni_move=nni_move,
+                            )
+                        best_candidates = [(neighbor_tree, new_ancestors, new_uppass_cache)]
+                        best_candidates_hash = {neighbor_tree_hash}
+                    elif score == best_score:
+                        if neighbor_tree_hash not in best_candidates_hash:
+                            if hash_hit:
+                                new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                                    tree=neighbor_tree,
+                                    samples_dict=samples_dict,
+                                    upper_pass_fst=upper_pass_fst,
+                                    lower_pass_fst=lower_pass_fst,
+                                    normal_name=normal_name,
+                                    prune_weight=prune_weight,
+                                    old_uppass_cache=current_uppass_cache,
+                                    nni_move=nni_move,
+                                )
+                            best_candidates.append((neighbor_tree, new_ancestors, new_uppass_cache))
+                            best_candidates_hash.add(neighbor_tree_hash)
+
+        if not best_candidates:
+            logger.info(f"NNI mode: sweep {sweep}: no neighbors enumerated, terminating")
+            break
+
+        if best_score < current_score:
+            previous_score = current_score
+            current_score = best_score
+
+            frontier = _dedup_candidates(best_candidates)
+            solutions = [(t, a) for t, a, _ in frontier]
+            solutions_hash = set(get_topology_hash(t) for t, a in solutions)
+            trace.append(current_score)
+            logger.info(
+                f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across {len(frontier)} "
+                f"frontier tree(s), accepted improvement {previous_score} -> {current_score}."
+            )
+        elif best_score == current_score:
+            new_candidates = [c for c in _dedup_candidates(best_candidates)
+                              if get_topology_hash(c[0]) not in solutions_hash]
+
+            if not new_candidates:
+                logger.info(
+                    f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
+                    f"{len(frontier)} frontier tree(s), plateau exhausted — no new  "
+                    f"co-optimal neighbor(s) at score {current_score}, terminating with "
+                    f"{len(solutions)} co-optimal tree(s)"
+                )
+                break
+            solutions.extend((t, a) for t, a, _ in new_candidates)
+            solutions_hash.update(get_topology_hash(t) for t, _, _ in new_candidates)
+
+            frontier = new_candidates
+            logger.info(
+                f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
+                f"{len(frontier)} frontier tree(s), plateau — added "
+                f"{len(new_candidates)} new co-optimal tree(s) at score {current_score}"
+            )
+        else:
+            logger.info(
+                f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
+                f"{len(frontier)} frontier tree(s), no improvement "
+                f"(best neighbor = {best_score}, current = {current_score}), "
+                f"terminating at NNI-local optimum with {len(solutions)} co-optimal tree(s)"
+            )
+            break
+
+        sweep += 1
+        if step_offset >= nni_max_iter:
+            max_nni_reached = True
+            break
+
+    if max_nni_reached:
+        logger.warning(
+            f"NNI mode: reached nni_max_iter={nni_max_iter} total neighbors evaluated "
+            f"without converging — hard cap hit; returning {len(solutions)} co-optimal "
+            f"tree(s) at score {current_score}"
+        )
+
+    return {
+        "best_trees": [t for t, _ in solutions],
+        "best_ancestors": [a for _, a in solutions],
+        "trace": trace,
+        "best_score": current_score,
+        "step_records": step_records,
+    }
+
+
+
+
+
+
 
 
 class MEDICCError(Exception):

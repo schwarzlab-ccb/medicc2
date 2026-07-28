@@ -89,11 +89,11 @@ def nni_neighbors(tree):
         yield new_tree, move
 
 def _eval_nni_neighbor(tree, move, old_uppass_cache, samples_dict, upper_pass_fst, lower_pass_fst,
-                       normal_name, prune_weight, step=0):
+                       normal_name, prune_weight, visited_solutions, step=0):
     """
     Apply one NNI move and evaluate it. Runs inside a worker process.
 
-    Returns (new_tree, ancestors, uppass_cache, score, step)
+    Returns (new_tree, ancestors, uppass_cache, score, step, nni_move)
     """
     # Lazy import
     import medicc.ancestors
@@ -101,23 +101,28 @@ def _eval_nni_neighbor(tree, move, old_uppass_cache, samples_dict, upper_pass_fs
     import medicc.core
 
     new_tree = _apply_nni_swap(tree, move.u_name, move.v_name, move.A_name, move.swap_target_name)
-    ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
-        tree=new_tree,
-        samples_dict=samples_dict,
-        upper_pass_fst=upper_pass_fst,
-        lower_pass_fst=lower_pass_fst,
-        normal_name=normal_name,
-        prune_weight=prune_weight,
-        old_uppass_cache=old_uppass_cache,
-        nni_move=move,
-    )
-    medicc.core.update_branch_lengths(new_tree, lower_pass_fst, ancestors, normal_name)
-    score = medicc.tools.sum_of_branch_length(new_tree)
-    return new_tree, ancestors, new_uppass_cache, score, step
+    new_tree_hash = medicc.tree_hash.get_topology_hash(new_tree)
+    if new_tree_hash in visited_solutions:
+        score = visited_solutions[new_tree_hash]
+        return new_tree, None, None, score, step, move
+    else:
+        ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+            tree=new_tree,
+            samples_dict=samples_dict,
+            upper_pass_fst=upper_pass_fst,
+            lower_pass_fst=lower_pass_fst,
+            normal_name=normal_name,
+            prune_weight=prune_weight,
+            old_uppass_cache=old_uppass_cache,
+            nni_move=move,
+        )
+        medicc.core.update_branch_lengths(new_tree, lower_pass_fst, ancestors, normal_name)
+        score = medicc.tools.sum_of_branch_length(new_tree)
+        return new_tree, ancestors, new_uppass_cache, score, step, move
 
 
 def evaluate_nni_neighbors_parallel(tree, old_uppass_cache, samples_dict,
-                                    normal_name, prune_weight, n_cores, upper_pass_fst, lower_pass_fst,
+                                    normal_name, prune_weight, n_cores, upper_pass_fst, lower_pass_fst, visited_solutions,
                                     step_start=0):
     """
     Evaluate all NNI neighbors in parallel using joblib
@@ -133,7 +138,7 @@ def evaluate_nni_neighbors_parallel(tree, old_uppass_cache, samples_dict,
     results = Parallel(n_jobs=n_cores)(
         delayed(_eval_nni_neighbor)(
             tree, move, old_uppass_cache, samples_dict, upper_pass_fst, lower_pass_fst,
-            normal_name, prune_weight, step=step_start+i,
+            normal_name, prune_weight, visited_solutions, step=step_start+i,
         )
         for i, move in enumerate(moves)
     )
