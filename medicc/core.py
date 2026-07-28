@@ -31,7 +31,11 @@ def main(input_df,
          no_wgd=False,
          total_cn=False,
          n_cores=None,
-         reconstruct_events=False):
+         reconstruct_events=False,
+         nni_mode_flag=False,
+         nni_max_iter=20000,
+         nni_trace_dir=None,
+         nni_export_all_topology=False):
     """ MEDICC Main Method """
 
     symbol_upper_table = asymm_upper_fst.input_symbols()
@@ -93,9 +97,12 @@ def main(input_df,
 
         nj_tree = input_tree
 
-    final_tree = copy.deepcopy(nj_tree)
+    if not nni_mode_flag:
+        final_tree = copy.deepcopy(nj_tree)
+    else:
+        final_tree_nni = _reshape_nj_for_search(nj_tree, normal_name)
 
-    if ancestral_reconstruction:
+    if not nni_mode_flag and ancestral_reconstruction:
         logger.info("Reconstructing ancestors.")
         ancestors = medicc.reconstruct_ancestors(tree=final_tree,
                                                  samples_dict=FSA_dict,
@@ -113,31 +120,91 @@ def main(input_df,
         ## Update branch lengths with ancestors
         logger.info("Updating branch lengths of final tree using ancestors.")
         update_branch_lengths(final_tree, asymm_upper_fst, ancestors, normal_name)
+    elif nni_mode_flag:
+        logger.info("NNI-mode: Reconstructing ancestors and exploring NNI tree space at the same time.")
+        nni_result = nni_mode(
+            tree=final_tree_nni,
+            samples_dict=FSA_dict,
+            upper_pass_fst=asymm_upper_fst,
+            lower_pass_fst=asymm_lower_fst,
+            normal_name=normal_name,
+            prune_weight=prune_weight,
+            nni_max_iter=nni_max_iter,
+            n_cores=n_cores,
+            nni_trace_dir=nni_trace_dir,
+        )
+
+        nni_trace = nni_result["trace"]
+        nni_step_records = nni_result["step_records"]
+
+        if nni_export_all_topology:
+            final_tree_l = nni_result["best_trees"]
+            ancestors_l = nni_result["best_ancestors"]
+            for i, final_tree in enumerate(final_tree_l):
+                ancestors_i = ancestors_l[i]
+                _wrap_tree_for_output(final_tree, asymm_upper_fst, ancestors_i, normal_name)
+            output_df_l = [create_df_from_fsa(input_df, ancestors_i) for ancestors_i in ancestors_l]
+        else:
+            final_tree = nni_result["best_trees"][0]
+            ancestors = nni_result["best_ancestors"][0]
+            _wrap_tree_for_output(final_tree, asymm_upper_fst, ancestors, normal_name)
+            logger.info("NNI mode: Creating output copynumbers.")
+            output_df = create_df_from_fsa(input_df, ancestors)
     else:
         output_df = input_df.copy()
 
     nj_tree.root_with_outgroup(normal_name)
-    final_tree.root_with_outgroup(normal_name)
+    if not nni_mode_flag:
+        final_tree.root_with_outgroup(normal_name)
 
     if ancestral_reconstruction and reconstruct_events:
-        logger.info("Reconstructing events.")
-        output_df, events_df = event_reconstruction.calculate_all_cn_events(
-            final_tree, output_df, allele_columns, normal_name,
-            wgd_x2=wgd_x2, no_wgd=no_wgd, total_cn=total_cn)
-        if len(events_df) != final_tree.total_branch_length():
-            faulty_nodes = []
-            for node in final_tree.find_clades():
-                if node.name is not None and node.name != normal_name and node.branch_length != 0 and node.branch_length != len(events_df.loc[node.name]):
-                    faulty_nodes.append(node.name)
-            logger.warning("Event recreation was faulty. Events in '_cn_events_df.tsv' will be "
-                        f"incorrect for the following nodes: {faulty_nodes}. "
-                        f"total_branch_length: {final_tree.total_branch_length()}, "
-                        f"nr of inferred events: {len(events_df)}")
+        if not nni_export_all_topology:
+            logger.info("Reconstructing events.")
+            output_df, events_df = event_reconstruction.calculate_all_cn_events(
+                final_tree, output_df, allele_columns, normal_name,
+                wgd_x2=wgd_x2, no_wgd=no_wgd, total_cn=total_cn)
+            if len(events_df) != final_tree.total_branch_length():
+                faulty_nodes = []
+                for node in final_tree.find_clades():
+                    if node.name is not None and node.name != normal_name and node.branch_length != 0 and node.branch_length != len(events_df.loc[node.name]):
+                        faulty_nodes.append(node.name)
+                logger.warning("Event recreation was faulty. Events in '_cn_events_df.tsv' will be "
+                            f"incorrect for the following nodes: {faulty_nodes}. "
+                            f"total_branch_length: {final_tree.total_branch_length()}, "
+                            f"nr of inferred events: {len(events_df)}")
+        else:
+            logger.info("Reconstruction events for all NNI topologies")
+            ouput_df_with_events_l = []
+            events_df_l = []
+            for i, output_df in enumerate(output_df_l):
+                output_df, events_df = event_reconstruction.calculate_all_cn_events(
+                    final_tree_l[i], output_df, allele_columns, normal_name,
+                    wgd_x2=wgd_x2, no_wgd=no_wgd, total_cn=total_cn)
+                if len(events_df) != final_tree_l[i].total_branch_length():
+                    faulty_nodes = []
+                    for node in final_tree_l[i].find_clades():
+                        if node.name is not None and node.name != normal_name and node.branch_length != 0 and node.branch_length != len(
+                                events_df.loc[node.name]):
+                            faulty_nodes.append(node.name)
+                    logger.warning(f"Event recreation was faulty. Events in '_cn_events_df_{i}.tsv' will be "
+                                   f"incorrect for the following nodes: {faulty_nodes}. "
+                                   f"total_branch_length: {final_tree_l[i].total_branch_length()}, "
+                                   f"nr of inferred events: {len(events_df)}")
+                ouput_df_with_events_l.append(output_df)
+                events_df_l.append(events_df)
+            output_df_l = ouput_df_with_events_l
+
 
     else:
         events_df = None
+        events_df_l = None
 
-    return sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df
+    if not nni_mode_flag:
+        return sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df
+    elif nni_mode_flag and not nni_export_all_topology:
+        return sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df, nni_trace, nni_step_records
+    elif nni_mode_flag and nni_export_all_topology:
+        return sample_labels, pairwise_distances, nj_tree, final_tree_l, output_df_l, events_df_l, nni_trace, nni_step_records
 
 
 def create_standard_fsa_dict_from_data(input_data,
@@ -757,9 +824,46 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
     }
 
 
+def _reshape_nj_for_search(nj_tree, normal_name):
+    """Reshape an NJ tree for in-place tree search.
 
+    After this transformation:
+      - tree.root.name == normal_name
+      - tree.root has exactly one structural child (the MRCA, e.g. "internal_0")
+      - the diploid leaf is no longer a child of the root
+    """
+    nj_tree_adj = copy.deepcopy(nj_tree)
+    nj_tree_adj.root_with_outgroup(normal_name)
+    nj_tree_adj.root.clades = [clade for clade in nj_tree_adj.root.clades if clade.name != normal_name]
+    nj_tree_adj.root.name = normal_name
+    return nj_tree_adj
 
+def _wrap_tree_for_output(final_tree, fst, ancestors, normal_name):
+    """Wrap a search-shape tree back into the standard PhyloXML output form.
 
+    The search shape has tree.root named after the diploid with a single
+    structural child (the MRCA). For plotting and output, MEDICC2 expects a new
+    unnamed root with two clades: the diploid and the MRCA. This function does
+    that wrap and updates branch lengths using the supplied FST and ancestors.
+
+    Mutates and returns the input tree.
+    """
+    # Recompute branch lengths on the search-shape tree FIRST — while the root is
+    # still the diploid/normal and the MRCA is its named child, so the MRCA edge is
+    # scored under `fst` like every other edge. After the re-root below, the MRCA's
+    # parent is the new unnamed root, which update_branch_lengths skips, leaving the
+    # MRCA edge with whatever the search left on it (e.g. an open=5000 length-
+    # encoding score instead of the event count).
+    logger.info("Updating branch lengths of final tree using ancestors.")
+    update_branch_lengths(final_tree, fst, ancestors, normal_name)
+
+    new_root_clade = Bio.Phylo.PhyloXML.Clade(branch_length=0)
+    final_tree.root.branch_length = 0
+    new_root_clade.clades.append(final_tree.root)
+    new_root_clade.clades.append(final_tree.root.clades[0])
+    final_tree.root.clades = []
+    final_tree.root = new_root_clade
+    return final_tree
 
 
 
