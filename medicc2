@@ -7,6 +7,7 @@ import pickle
 import sys
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 import medicc
 
@@ -52,6 +53,13 @@ parser.add_argument("--length-aware-ancestors", "-la-ancestors",
                     dest="length_aware_ancestors",
                     default=False,
                     help="Use the matched event-counting FST for the upper pass and length-encoding FST for lower-pass ancestral selection. NJ distances and reported branch lengths remain event-counted.")
+parser.add_argument("--nni-mode", action="store_true", default=False, dest='nni_mode',
+                    help="Launch medicc2's Nearest Neighbor Interchange(NNI) topology search.")
+parser.add_argument("--nni-max-topology", type=int, default=20000, dest='nni_max_iter', help="Maximum number of topologies NNI explores")
+parser.add_argument("--nni-export-all-topology", action="store_true", default=False, dest='nni_export_all_topology',
+                    help="Export all co-optimal topologies NNI found.")
+parser.add_argument("--nni-complete-log", action="store_true", default=False, dest='nni_complete_log',
+                    help="Export complete log of NNI mode.")
 parser.add_argument("--normal-name", "-n",
                     default="diploid",
                     type=str,
@@ -157,7 +165,20 @@ if args.silent:
     logging.getLogger('medicc').setLevel(logging.CRITICAL)
     logger.setLevel(logging.CRITICAL)
 
+# Handle impossible combinations of command line flags
+if args.nni_mode:
+    if args.topology_only:
+        raise ValueError("Nearest Neighbour Interchange mode requires ancestral reconstruction and thus no topology only allowed.")
+else:
+    if args.nni_export_all_topology or args.nni_complete_log:
+        raise ValueError("Nearest Neighbour Interchange related flags are only valid when --nni-mode is enabled.")
+
 output_dir = args.output_dir
+if args.nni_complete_log:
+    nni_trace_dir = os.path.join(output_dir, 'nni-trace')
+else:
+    nni_trace_dir = None
+
 normal_name = args.normal_name 
 allele_columns = [x.strip() for x in args.input_allele_columns.split(',')]
 
@@ -272,22 +293,180 @@ if args.n_cores is not None:
 
 # Run main method
 logger.info("Running main reconstruction routine.")
-sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df = medicc.main(
-    input_df=input_df,
-    asymm_upper_fst=upper_pass_fst,
-    asymm_lower_fst=lower_pass_fst,
-    normal_name=normal_name,
-    input_tree=input_tree, 
-    ancestral_reconstruction=not args.topology_only,
-    chr_separator=args.fst_chr_separator.strip(),
-    prune_weight=args.prune_weight,
-    allele_columns=allele_columns,
-    no_wgd=args.no_wgd,
-    wgd_x2=args.wgd_x2,
-    total_cn=args.total_copy_numbers,
-    n_cores=args.n_cores,
-    reconstruct_events=args.events)
+if not args.nni_mode:
+    sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df = medicc.main(
+        input_df=input_df,
+        asymm_upper_fst=upper_pass_fst,
+        asymm_lower_fst=lower_pass_fst,
+        normal_name=normal_name,
+        input_tree=input_tree,
+        ancestral_reconstruction=not args.topology_only,
+        chr_separator=args.fst_chr_separator.strip(),
+        prune_weight=args.prune_weight,
+        allele_columns=allele_columns,
+        no_wgd=args.no_wgd,
+        wgd_x2=args.wgd_x2,
+        total_cn=args.total_copy_numbers,
+        n_cores=args.n_cores,
+        reconstruct_events=args.events,
+        nni_mode_flag=False)
+else:
+    if not args.nni_export_all_topology:
+        sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df, nni_trace, nni_step_records = medicc.main(
+            input_df=input_df,
+            asymm_upper_fst=upper_pass_fst,
+            asymm_lower_fst=lower_pass_fst,
+            normal_name=normal_name,
+            input_tree=input_tree,
+            ancestral_reconstruction=not args.topology_only,
+            chr_separator=args.fst_chr_separator.strip(),
+            prune_weight=args.prune_weight,
+            allele_columns=allele_columns,
+            no_wgd=args.no_wgd,
+            wgd_x2=args.wgd_x2,
+            total_cn=args.total_copy_numbers,
+            n_cores=args.n_cores,
+            reconstruct_events=args.events,
+            nni_mode_flag=True,
+            nni_max_iter=args.nni_max_iter,
+            nni_trace_dir=nni_trace_dir,
+            nni_export_all_topology=False)
+    else:
+        sample_labels, pairwise_distances, nj_tree, final_tree_l, output_df_l, events_df_l, nni_trace, nni_step_records = medicc.main(
+            input_df=input_df,
+            asymm_upper_fst=upper_pass_fst,
+            asymm_lower_fst=lower_pass_fst,
+            normal_name=normal_name,
+            input_tree=input_tree,
+            ancestral_reconstruction=not args.topology_only,
+            chr_separator=args.fst_chr_separator.strip(),
+            prune_weight=args.prune_weight,
+            allele_columns=allele_columns,
+            no_wgd=args.no_wgd,
+            wgd_x2=args.wgd_x2,
+            total_cn=args.total_copy_numbers,
+            n_cores=args.n_cores,
+            reconstruct_events=args.events,
+            nni_mode_flag=True,
+            nni_max_iter=args.nni_max_iter,
+            nni_trace_dir=nni_trace_dir,
+            nni_export_all_topology=True)
 
+        # Handel all topology file io
+        # Write results
+        topology_counter = 1
+        for i in range(len(final_tree_l)):
+            final_tree = final_tree_l[i]
+            topology_counter = i + 1
+            output_df = output_df_l[i]
+            events_df = events_df_l[i] if events_df_l is not None else None
+
+            # Create a directory under output_dir for this topology
+            topology_dir = os.path.join(output_dir, f"topology_{topology_counter}")
+            os.makedirs(topology_dir, exist_ok=True)
+
+            # Write trees
+            logger.info(f"Writing tree_topology_{topology_counter}.")
+            medicc.io.write_tree_files(tree=final_tree, normal_name=normal_name, out_name=os.path.join(
+                topology_dir, output_prefix + f"_final_tree_topology_{topology_counter}"),
+                                       plot_tree=(not args.no_plot_tree))
+            medicc.io.write_branch_lengths(tree=final_tree, out_name=os.path.join(
+                topology_dir, output_prefix + f"_branch_lengths_topology_{topology_counter}.tsv"))
+
+            # Write output table
+            output_df.to_csv(
+                os.path.join(topology_dir, output_prefix + f"_final_cn_profiles_topology_{topology_counter}.tsv"),
+                sep='\t')
+
+            # Write events
+            if events_df is not None:
+                events_df.to_csv(os.path.join(topology_dir, output_prefix + "_copynumber_events_df.tsv"),
+                                 sep='\t', index=True)
+
+                if args.chromosomes_bed != 'none' or args.regions_bed != 'none':
+                    logger.info("Overlapping copy-number events with chromosomes and known oncogenes.")
+                    overlaps = medicc.event_reconstruction.overlap_events(events_df=events_df, alleles=allele_columns,
+                                                                          normal_name=normal_name,
+                                                                          chromosome_bed=args.chromosomes_bed,
+                                                                          regions_bed=args.regions_bed)
+                    overlaps.to_csv(os.path.join(topology_dir, output_prefix + "_events_overlap.tsv"),
+                                    sep='\t', index=True)
+
+            # Summarize
+            logger.info("Writing patient summary.")
+            summary = medicc.summarize_patient(
+                final_tree, pairwise_distances.values, sample_labels, normal_name, events_df)
+            summary.to_csv(os.path.join(topology_dir, output_prefix + "_summary.tsv"),
+                           index=True, header=False, sep='\t')
+
+            # Plotting
+            if args.plot == 'both':
+                plotting = ['heatmap', 'bars']
+            elif args.plot == 'auto':
+                if len(sample_labels) < 50:
+                    plotting = ['bars']
+                else:
+                    plotting = ['heatmap']
+            else:
+                plotting = [args.plot]
+
+            if 'bars' in plotting:
+                logger.info(f"Plotting copy-number profiles (bars) for topology_{topology_counter}.")
+                p = medicc.plot.plot_cn_profiles(
+                    output_df,
+                    input_tree=final_tree,
+                    title=output_prefix,
+                    normal_name=normal_name,
+                    allele_columns=allele_columns,
+                    show_branch_support=False,
+                    label_func=None)
+                p.savefig(os.path.join(topology_dir, output_prefix + f'_cn_profiles_topology_{topology_counter}.pdf'),
+                          bbox_inches='tight')
+                plt.close(p)
+
+            if 'heatmap' in plotting:
+                logger.info(f"Plotting copy-number profiles (heatmap) for topology_{topology_counter}.")
+                p = medicc.plot.plot_cn_heatmap(
+                    output_df,
+                    final_tree=final_tree,
+                    alleles=allele_columns, normal_name=normal_name,
+                    total_copy_numbers=args.total_copy_numbers)
+                p.savefig(
+                    os.path.join(topology_dir, output_prefix + f'_cn_profiles_heatmap_topology_{topology_counter}.pdf'),
+                    bbox_inches='tight')
+                plt.close(p)
+
+            if 'none' in plotting:
+                logger.info(
+                    f"Skipped plotting of copy-number profiles (change --plot if this is undesired) for topology_{topology_counter}.")
+
+
+    # Write NNI log and plot nni_trace
+    fig = medicc.plot.plot_nni_trace(nni_trace)
+    fig.savefig(
+        os.path.join(output_dir, "nni_trace.png"), bbox_inches='tight'
+    )
+    plt.close(fig)
+    if nni_trace_dir is not None and nni_step_records:
+        logger.info("NNI mode: Writing trace file to %s", nni_trace_dir)
+        os.makedirs(nni_trace_dir, exist_ok=True)
+        # Write one single tsv file for the trace
+        tsv_path = os.path.join(nni_trace_dir, "nni_trace.tsv")
+        with open(tsv_path, "w") as tsv:
+            tsv.write("step\tnewick\tsum_of_branch_length\n")
+            for step, newick_str, score in sorted(nni_step_records):
+                tsv.write(f"{step}\t{newick_str}\t{score}\n")
+
+
+
+# Output pairwise distance matrices
+logger.info("Writing pairwise distance matrices.")
+medicc.io.write_pairwise_distances(sample_labels, pairwise_distances, os.path.join(
+    output_dir, output_prefix + "_pairwise_distances"))
+
+if args.nni_export_all_topology:
+    logger.info("Done.")
+    sys.exit(0)
 
 # Write events table and overlap events with chromosome and oncogenes
 if events_df is not None:
@@ -296,19 +475,14 @@ if events_df is not None:
 
     if args.chromosomes_bed != 'none' or args.regions_bed != 'none':
         logger.info("Overlapping copy-number events with chromosomes and known oncogenes.")
-        overlaps = medicc.event_reconstruction.overlap_events(events_df=events_df, alleles=allele_columns, 
+        overlaps = medicc.event_reconstruction.overlap_events(events_df=events_df, alleles=allele_columns,
                                             normal_name=normal_name,
-                                            chromosome_bed=args.chromosomes_bed, 
+                                            chromosome_bed=args.chromosomes_bed,
                                             regions_bed=args.regions_bed)
         overlaps.to_csv(os.path.join(output_dir, output_prefix + "_events_overlap.tsv"),
                         sep='\t', index=True)
 
 logger.info(f"Output is saved as {output_dir}/{output_prefix}...")
-
-# Output pairwise distance matrices
-logger.info("Writing pairwise distance matrices.")
-medicc.io.write_pairwise_distances(sample_labels, pairwise_distances, os.path.join(
-    output_dir, output_prefix + "_pairwise_distances"))
 
 # Write trees
 logger.info("Writing trees.")
@@ -354,6 +528,7 @@ if args.bootstrap_nr is not None:
                                 show_branch_lengths=True,
                                 show_branch_support=True)
     fig.savefig(os.path.join(output_dir, output_prefix + '_support_tree.pdf'), bbox_inches='tight')
+    plt.close(fig)
 else:
     support_tree = None
 
@@ -381,6 +556,7 @@ if 'bars' in plotting:
         show_branch_support=support_tree is not None,
         label_func=None)
     p.savefig(os.path.join(output_dir, output_prefix + '_cn_profiles.pdf'), bbox_inches='tight')
+    plt.close(p)
 
 if 'heatmap' in plotting:
     logger.info("Plotting copy-number profiles (heatmap).")
@@ -390,6 +566,7 @@ if 'heatmap' in plotting:
         alleles=allele_columns, normal_name=normal_name,
         total_copy_numbers=args.total_copy_numbers)
     p.savefig(os.path.join(output_dir, output_prefix + '_cn_profiles_heatmap.pdf'), bbox_inches='tight')
+    plt.close(p)
 
 if 'none' in plotting:
     logger.info("Skipped plotting of copy-number profiles (change --plot if this is undesired)")

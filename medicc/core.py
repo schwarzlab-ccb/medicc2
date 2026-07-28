@@ -756,6 +756,9 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                                 )
                             best_candidates.append((neighbor_tree, new_ancestors, new_uppass_cache))
                             best_candidates_hash.add(neighbor_tree_hash)
+            if step_offset >= nni_max_iter:
+                max_nni_reached = True
+                break
 
         if not best_candidates:
             logger.info(f"NNI mode: sweep {sweep}: no neighbors enumerated, terminating")
@@ -804,8 +807,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
             break
 
         sweep += 1
-        if step_offset >= nni_max_iter:
-            max_nni_reached = True
+        if max_nni_reached:
             break
 
     if max_nni_reached:

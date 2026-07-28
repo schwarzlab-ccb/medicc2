@@ -982,6 +982,15 @@ def compute_cn_change(df, tree, normal_name='diploid'):
 
     return cn_change
 
+def plot_nni_trace(trace):
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(trace, '-o', alpha=0.7, markersize=4)
+    ax.set_xlabel('NNI Sweep')
+    ax.set_ylabel('Sum of Branch Lengths')
+    ax.set_title('NNI Trace')
+    ax.grid(True, linestyle='--', alpha=0.7)
+    plt.tight_layout()
+    return fig
 
 class MEDICCPlotError(Exception):
     pass

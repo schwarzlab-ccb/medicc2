@@ -3,7 +3,7 @@ import os
 
 import Bio
 import fstlib
-import matplotlib
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
@@ -336,11 +336,12 @@ def write_tree_files(tree, out_name: str, plot_tree=True, draw_ascii=False, norm
             Bio.Phylo.draw_ascii(tree, file = f)
 
     if plot_tree:
-        plot.plot_tree(tree,
+        fig = plot.plot_tree(tree,
                        output_name=out_name,
                        normal_name=normal_name,
                        label_func=lambda x: x if 'internal' not in x else '',
                        show_branch_lengths=True)
+        plt.close(fig)
 
 
 def write_branch_lengths(tree, out_name: str):
