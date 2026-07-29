@@ -424,6 +424,59 @@ def test_all_ipynb_notebooks(notebook):
     assert process.returncode == 0, f'Error while running notebook {notebook}: {process.stderr.read()}'
 
 
+def _run_cli_validation(tmp_path, extra_args):
+    "Invoke medicc2 with a nonexistent input file, only to exercise its early argument-validation checks."
+    process = subprocess.Popen(
+        [sys.executable, "medicc2", "nonexistent_input.tsv", str(tmp_path)] + extra_args,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        cwd=pathlib.Path(__file__).parent.parent.absolute())
+    _, stderr = process.communicate(timeout=30)
+    return process.returncode, stderr.decode()
+
+
+def test_cli_rejects_bootstrap_nr_below_five(tmp_path):
+    returncode, stderr = _run_cli_validation(tmp_path, ["--bootstrap-nr", "3"])
+    assert returncode != 0
+    assert "bootstrap_nr must be at least 5" in stderr
+
+
+def test_cli_allows_missing_bootstrap_nr(tmp_path):
+    # Regression test: args.bootstrap_nr defaults to None, and `None < 5` used
+    # to raise a TypeError before any real work started, breaking every
+    # invocation of the CLI regardless of --nni-mode.
+    returncode, stderr = _run_cli_validation(tmp_path, [])
+    assert "bootstrap_nr must be at least 5" not in stderr
+    assert "TypeError" not in stderr
+
+
+def test_cli_rejects_export_all_topology_without_nni_mode(tmp_path):
+    returncode, stderr = _run_cli_validation(tmp_path, ["--nni-export-all-topology"])
+    assert returncode != 0
+    assert "only valid when --nni-mode is enabled" in stderr
+
+
+def test_cli_rejects_topology_only_with_nni_mode(tmp_path):
+    returncode, stderr = _run_cli_validation(tmp_path, ["--nni-mode", "--topology-only"])
+    assert returncode != 0
+    assert "no topology only allowed" in stderr
+
+
+def test_cli_rejects_nni_export_all_topology_with_bootstrap(tmp_path):
+    returncode, stderr = _run_cli_validation(
+        tmp_path, ["--nni-mode", "--nni-export-all-topology", "--bootstrap-nr", "5"])
+    assert returncode != 0
+    assert "currently not supported" in stderr
+
+
+def test_cli_allows_nni_export_all_topology_without_bootstrap(tmp_path):
+    # Regression test: args.bootstrap_method always has a truthy default
+    # ('chr-wise') regardless of whether bootstrap was ever requested, which
+    # previously made this combination always rejected, bootstrap or not.
+    returncode, stderr = _run_cli_validation(tmp_path, ["--nni-mode", "--nni-export-all-topology"])
+    assert "currently not supported" not in stderr
+    assert "only valid when --nni-mode" not in stderr
+
+
 def get_number_of_events(output_dir, file_prefix):
     with open(os.path.join(output_dir, f"{file_prefix}_copynumber_events_df.tsv"), 'r') as f:
         events = f.readlines()
