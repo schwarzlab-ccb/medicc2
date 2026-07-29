@@ -2,7 +2,7 @@
 NNI (nearest neighbor interchange) move for MEDICC2
 
 The NNI move at internal edge (u, v), where u is the parent of v and v is itself
-internal - picksthe "uncle" A (the other child of u) and swaps it with one of v's
+internal - picks the "uncle" A (the other child of u) and swaps it with one of v's
 children (B or C). Two distinct moves per qualifying edge.
 """
 
@@ -23,10 +23,10 @@ def _is_root(clade, root):
 
 def _apply_nni_swap(tree, u_name, v_name, A_name, swap_target_name):
     """
-    Deepcopy 'tree' and apply an NNI swap at edge (u, v), exchanging A and swap_targe.
+    Deepcopy 'tree' and apply an NNI swap at edge (u, v), exchanging A and swap_target.
 
     Pre: u is parent of v; A is u's other child; swap_target is one of v's children.
-    post: u's children are {swap_target, v}; v's children are {A, the_other_v_child}.
+    Post: u's children are {swap_target, v}; v's children are {A, the_other_v_child}.
 
     Returns the new tree. No new internal nodes are created; all names preserved.
     """

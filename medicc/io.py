@@ -20,10 +20,10 @@ def read_and_parse_input_data(filename, normal_name='diploid', input_type='tsv',
         raise MEDICCIOError("Maximum copy number must be <= 8.")
 
     if len(allele_columns) == 1 and not total_copy_numbers:
-        logger.warning('You have provided only one allele column but the --total-copy-numbers flag was not set')
+        logger.warning('You have provided only one allele column but the --total-copy-numbers flag was not set.')
     if total_copy_numbers and not len(allele_columns) == 1:
         raise MEDICCIOError("You have set the --total-copy-numbers flag but provided more than one allele column. "
-                            "Set allele columns with the flag --input-allele-columns")
+                            "Set allele columns with the flag --input-allele-columns.")
 
     ## Read in input data
     if input_type.lower() == "fasta" or input_type.lower() == 'f':
@@ -48,7 +48,7 @@ def read_and_parse_input_data(filename, normal_name='diploid', input_type='tsv',
     normal_samples = np.setdiff1d(input_df_stacked.index[
         (input_df_stacked == normal_value).all(axis=1)], normal_name)
     if len(normal_samples) > 0:
-        logger.warning(f"Diploid samples found in input data: {normal_samples}")
+        logger.warning(f"Diploid samples found in input data: {normal_samples}. These will be used as-is; remove them if this is unintended.")
     if len(normal_samples) == len(np.unique(input_df.index.get_level_values('sample_id'))):
         logger.warning("All samples are diploid! MEDICC2 results will be meaningless!")
     
@@ -79,7 +79,7 @@ def read_fst(user_fst=None, no_wgd=False, n_wgd=None, total_copy_numbers=False, 
         if n_wgd is not None and n_wgd != 1:
             raise ValueError("Currently only 1 WGD event is supported for length encoding.")
         if not no_wgd:
-            print("WARNING: n_wgd is silently changed to 1 because only 1 WGD event is supported for length encoding")
+            logger.warning("WARNING: n_wgd is silently changed to 1 because only 1 WGD event is supported for length encoding")
             n_wgd = 1
 
     fst_paths = {
@@ -110,7 +110,7 @@ def read_fst(user_fst=None, no_wgd=False, n_wgd=None, total_copy_numbers=False, 
         fst_key = (no_wgd, n_wgd, total_copy_numbers, wgd_x2, force_wgd, length_encoding)
         if fst_key not in fst_paths:
             raise MEDICCIOError("Invalid combination of the following parameters for loading the FST: "
-                                "no_wgd, n_wgd, total_copy_numbers, wgd_x2, force_wgd, length_encoding")
+                                f"no_wgd: {no_wgd}, n_wgd: {n_wgd}, total_copy_numbers: {total_copy_numbers}, wgd_x2: {wgd_x2}, force_wgd: {force_wgd}, length_encoding: {length_encoding}.")
         fst_path = fst_paths[fst_key]
     
     # elif no_wgd:
@@ -189,7 +189,7 @@ def validate_input(input_df, symbol_table=None, normal_name='diploid'):
     # Check if all samples have same segments
     if input_df.unstack('sample_id').isna().sum().sum() != 0:
         raise MEDICCIOError("The samples have different segments!\n"
-                            "Total number of unique segments: {}\n".format(len(input_df.unstack('sample_id'))))
+                            "Total number of unique segments: {}.".format(len(input_df.unstack('sample_id'))))
 
     if symbol_table is not None:
         # Check if symbols are in symbol table
@@ -200,7 +200,7 @@ def validate_input(input_df, symbol_table=None, normal_name='diploid'):
             raise MEDICCIOError(f"Not all input symbols are contained in symbol table. Offending symbols: {str(not_in_set)}")
 
 
-    logger.info('Input data is valid!')
+    logger.info('Input data is valid.')
 
 
 def filter_by_segment_length(input_df, filter_size):
@@ -215,14 +215,14 @@ def _read_tsv_as_dataframe(path, allele_columns=['cn_a','cn_b'], maxcn=8, chrom_
     columnn_names = ['sample_id', chrom_column, 'start', 'end'] + allele_columns
     if len(np.setdiff1d(columnn_names, input_file.columns)) > 0:
         raise MEDICCIOError(f"TSV file needs the following columns: sample_id, chrom, start, end and the allele columns ({allele_columns})"
-                            "\nMissing columns are: {}".format(
+                            "\nMissing columns are: {}.".format(
                                 np.setdiff1d(columnn_names, input_file.columns)))
 
     logger.info(f"Successfully read input file. Using columns: {', '.join(columnn_names)}")
     input_file = input_file[columnn_names]
     for c in allele_columns:
         if input_file[c].dtype in [np.dtype('float64'), np.dtype('float32')]:
-            logger.warning("Floating point payload! I will round, but this might not be intended.")
+            logger.warning("Copy-number values are not integers; they will be rounded. If this is unintended, check your input data.")
             input_file[c] = input_file[c].round().astype('int')
         if input_file[c].dtype in [np.dtype('int64'), np.dtype('int32')]:
             if np.any(input_file[c]>maxcn):
@@ -230,7 +230,7 @@ def _read_tsv_as_dataframe(path, allele_columns=['cn_a','cn_b'], maxcn=8, chrom_
                 input_file[c] = np.fmin(input_file[c], maxcn)
     input_file[chrom_column] = tools.format_chromosomes(input_file[chrom_column])
     if any(["Y" in str(x) for x in input_file[chrom_column].unique()]):
-        logger.warning("Y chromosome detected in input. This might cause errors down the line!")
+        logger.warning("Y chromosome detected in input; this is not fully supported and may cause errors in downstream steps.")
     input_file.set_index(['sample_id', chrom_column, 'start', 'end'], inplace=True)
     input_file.sort_index(inplace=True)
     input_file[allele_columns] = input_file[allele_columns].astype(str)
@@ -239,7 +239,7 @@ def _read_tsv_as_dataframe(path, allele_columns=['cn_a','cn_b'], maxcn=8, chrom_
 
 
 def _read_fasta_as_dataframe(infile: str, separator: str = 'X', allele_columns = ['cn_a','cn_b'], maxcn: int = 8):
-    """Reads FASTA decriptor file (old MEDICC input format) and reads the corresponding FASTA files to generate
+    """Reads FASTA descriptor file (old MEDICC input format) and reads the corresponding FASTA files to generate
     a data frame with the same format as the input TSV format. """
     logger.info(f"Reading FASTA dataset from description file {infile}.")
     description_file = pd.read_csv(infile,
@@ -297,7 +297,7 @@ def _read_fasta_as_dataframe(infile: str, separator: str = 'X', allele_columns =
 
 def add_normal_sample(df, normal_name, allele_columns=['cn_a','cn_b'], total_copy_numbers=False,
                       chrom_column='chrom'):
-    """Adds an artificial normal samples with the supplied name to the data frame.
+    """Adds an artificial normal sample with the supplied name to the data frame.
     The normal sample has CN=1 on all supplied alleles. """
     samples = df.index.get_level_values('sample_id').unique()
 
@@ -307,17 +307,17 @@ def add_normal_sample(df, normal_name, allele_columns=['cn_a','cn_b'], total_cop
         normal_value = '1'
 
     if normal_name is not None and normal_name not in samples:
-        logger.info(f"Normal sample '{normal_name}' not found, adding artifical normal by the name: '{normal_name}'.")
+        logger.info(f"Normal sample '{normal_name}' not found, adding artificial normal by the name: '{normal_name}'.")
         tmp = df.unstack('sample_id')
         for col in allele_columns:
             tmp.loc[:, (col, normal_name)] = normal_value
         tmp = tmp.stack('sample_id')
         tmp = tmp.reorder_levels(['sample_id', chrom_column, 'start', 'end']).sort_index()
     else:
-        logger.info(f"Sample '{normal_name}' was found in data is is used as normal")
+        logger.info(f"Sample '{normal_name}' was found in data and will be used as normal.")
         if np.any(df.loc[normal_name] == '0'):
             logger.warning("The provided normal sample contains segments with copy number 0. "
-                        "If any other sample has non-zero values in these segments, MEDICC will crash")
+                        "If any other sample has non-zero values in these segments, MEDICC will crash.")
         if np.any(df.loc[normal_name] != normal_value):
             logger.warning("The provided normal sample contains segments with copy number != {}.".format(normal_value))
 
@@ -327,7 +327,7 @@ def add_normal_sample(df, normal_name, allele_columns=['cn_a','cn_b'], total_cop
 
 
 def write_tree_files(tree, out_name: str, plot_tree=True, draw_ascii=False, normal_name='diploid'):
-    """Writes a Newick, PhyloXML, Ascii graphic and PNG grahic file of the tree. """
+    """Writes a Newick, PhyloXML, Ascii graphic and PNG graphic file of the tree. """
     Bio.Phylo.write(tree, out_name + ".new", "newick")
     Bio.Phylo.write(tree, out_name + ".xml", "phyloxml")
 
@@ -366,7 +366,7 @@ def import_tree(tree_file, normal_name='diploid', file_format='newick', quality_
     input_tree = Bio.Phylo.BaseTree.copy.deepcopy(tree)
     tmpsearch = [c for c in input_tree.find_clades(name = normal_name)]
     if len(tmpsearch) == 0:
-        raise ValueError(f"normal name '{normal_name}' not found in tree")
+        raise ValueError(f"normal name '{normal_name}' not found in tree.")
     normal_name = tmpsearch[0]
     root_path = input_tree.get_path(normal_name)[::-1]
 

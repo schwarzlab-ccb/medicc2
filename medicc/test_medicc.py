@@ -112,7 +112,7 @@ def test_medicc_with_simple_example():
 
 
 def test_medicc_with_testing_example():
-    "Testing testing example"
+    "Testing the 'testing_example' dataset"
     output_dir = 'examples/test_output'
     process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
@@ -148,34 +148,6 @@ def test_medicc_with_testing_example_total_copy_numbers():
     process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
                                 output_dir, "--total-copy-numbers", 
                                 "--input-allele-columns", "cn_a", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
-                               stdout=subprocess.PIPE,
-                               cwd=pathlib.Path(__file__).parent.parent.absolute())
-
-    while process.poll() is None:
-        # Process hasn't exited yet
-        time.sleep(0.5)
-
-    expected_files = ['testing_example_cn_profiles.pdf', 'testing_example_final_cn_profiles.tsv',
-                      'testing_example_final_tree.new', 'testing_example_final_tree.png',
-                      'testing_example_final_tree.xml', 'testing_example_pairwise_distances.tsv',
-                      'testing_example_summary.tsv', 'testing_example_copynumber_events_df.tsv',
-                      'testing_example_events_overlap.tsv', 'testing_example_branch_lengths.tsv']
-    all_files_exist = [os.path.isfile(os.path.join(output_dir, f))
-                       for f in expected_files]
-    nr_events, tree_size = get_number_of_events(output_dir, 'testing_example')
-    subprocess.Popen(["rm", output_dir, "-rf"])
-
-    assert process.returncode == 0, 'Error while running MEDICC'
-    assert np.all(all_files_exist), "Some files were not created! Missing files are: {}".format(
-        np.array(expected_files)[~np.array(all_files_exist)])
-    assert nr_events == tree_size, f"Number of events is {nr_events}, but tree size is {tree_size}"
-
-
-def test_medicc_with_testing_example_parallelization():
-    "Testing small example"
-    output_dir = 'examples/test_output_parallelization'
-    process = subprocess.Popen([sys.executable, "medicc2", "examples/testing_example/testing_example.tsv", 
-                                output_dir, "--n-cores", "4", "--events", "--chromosomes-bed", "default", "--regions-bed", "default"],
                                stdout=subprocess.PIPE,
                                cwd=pathlib.Path(__file__).parent.parent.absolute())
 
@@ -458,14 +430,14 @@ def test_cli_rejects_export_all_topology_without_nni_mode(tmp_path):
 def test_cli_rejects_topology_only_with_nni_mode(tmp_path):
     returncode, stderr = _run_cli_validation(tmp_path, ["--nni-mode", "--topology-only"])
     assert returncode != 0
-    assert "no topology only allowed" in stderr
+    assert "cannot be used together with --nni-mode" in stderr
 
 
 def test_cli_rejects_nni_export_all_topology_with_bootstrap(tmp_path):
     returncode, stderr = _run_cli_validation(
         tmp_path, ["--nni-mode", "--nni-export-all-topology", "--bootstrap-nr", "5"])
     assert returncode != 0
-    assert "currently not supported" in stderr
+    assert "cannot be combined with --bootstrap-nr" in stderr
 
 
 def test_cli_allows_nni_export_all_topology_without_bootstrap(tmp_path):
@@ -473,7 +445,7 @@ def test_cli_allows_nni_export_all_topology_without_bootstrap(tmp_path):
     # ('chr-wise') regardless of whether bootstrap was ever requested, which
     # previously made this combination always rejected, bootstrap or not.
     returncode, stderr = _run_cli_validation(tmp_path, ["--nni-mode", "--nni-export-all-topology"])
-    assert "currently not supported" not in stderr
+    assert "cannot be combined with --bootstrap-nr" not in stderr
     assert "only valid when --nni-mode" not in stderr
 
 

@@ -57,7 +57,7 @@ def main(input_df,
     ## Reconstruct a tree
     if input_tree is None:
         ## Calculate pairwise distances
-        logger.info("Calculating pairwise distance matrices")
+        logger.info("Calculating pairwise distance matrices.")
         if n_cores is not None and n_cores > 1:
             pairwise_distances = parallelization_calc_pairwise_distance(sample_labels, asymm_upper_fst, CN_str_dict,
                                                                                     n_cores)
@@ -69,13 +69,13 @@ def main(input_df,
                               for s1, s2 in zip(*np.where((pairwise_distances == np.inf)))]
             raise MEDICCError("Evolutionary distances could not be calculated for some sample "
                               "pairings. Please check the input data.\n\nThe affected pairs are: "
-                              f"{affected_pairs}")
+                              f"{affected_pairs}.")
 
         logger.info("Inferring tree topology.")
         nj_tree = infer_tree_topology(
             pairwise_distances.values, pairwise_distances.index, normal_name=normal_name)
     else:
-        logger.info("Tree provided, using it. No pairwise distance matrix is calculated!")
+        logger.info("Tree provided, using it. No pairwise distance matrix is calculated.")
 
         pairwise_distances = pd.DataFrame(0, columns=FSA_dict.keys(), index=FSA_dict.keys())
 
@@ -84,12 +84,12 @@ def main(input_df,
         df_samples = np.unique(input_df.index.get_level_values('sample_id'))[1:]
 
         assert len(tree_leaves) == len(df_samples), \
-            "Number of samples differs in input tree and input dataframe"
+            "The number of samples in input tree differs from the number of samples in input dataframe."
 
         assert np.all(np.sort(tree_leaves) == np.sort(df_samples)), (
-            "Input tree does not match input dataframe: "
+            "The names of samples in input tree differ from the names of samples in input dataframe: "
             f"{np.sort(tree_leaves)}\n"
-            f"{np.sort(df_samples)}")
+            f"{np.sort(df_samples)}.")
         
         # necessary for the way that reconstruct_ancestors is performed
         if ancestral_reconstruction:
@@ -121,7 +121,7 @@ def main(input_df,
         logger.info("Updating branch lengths of final tree using ancestors.")
         update_branch_lengths(final_tree, asymm_upper_fst, ancestors, normal_name)
     elif nni_mode_flag:
-        logger.info("NNI-mode: Reconstructing ancestors and exploring NNI tree space at the same time.")
+        logger.info("NNI mode: Reconstructing ancestors and exploring NNI tree space simultaneously.")
         nni_result = nni_mode(
             tree=final_tree_nni,
             samples_dict=FSA_dict,
@@ -148,7 +148,7 @@ def main(input_df,
             final_tree = nni_result["best_trees"][0]
             ancestors = nni_result["best_ancestors"][0]
             _wrap_tree_for_output(final_tree, asymm_upper_fst, ancestors, normal_name)
-            logger.info("NNI mode: Creating output copynumbers.")
+            logger.info("NNI mode: Creating output copy-number profiles.")
             output_df = create_df_from_fsa(input_df, ancestors)
     else:
         output_df = input_df.copy()
@@ -171,9 +171,9 @@ def main(input_df,
                 logger.warning("Event recreation was faulty. Events in '_cn_events_df.tsv' will be "
                             f"incorrect for the following nodes: {faulty_nodes}. "
                             f"total_branch_length: {final_tree.total_branch_length()}, "
-                            f"nr of inferred events: {len(events_df)}")
+                            f"nr of inferred events: {len(events_df)}.")
         else:
-            logger.info("Reconstruction events for all NNI topologies")
+            logger.info("Reconstructing events for all NNI topologies")
             ouput_df_with_events_l = []
             events_df_l = []
             for i, output_df in enumerate(output_df_l):
@@ -229,8 +229,8 @@ def create_standard_fsa_dict_from_data(input_data,
             return separator.join(["".join(x.astype('str')) for _, x in cnp.groupby('chrom', observed=False)])
 
     else:
-        raise MEDICCError("Input to function create_standard_fsa_dict_from_data has to be either"
-                          "pd.DataFrame or pd.Series. \n input provided was {}".format(type(input_data)))
+        raise MEDICCError("Input to function create_standard_fsa_dict_from_data has to be either "
+                          "pd.DataFrame or pd.Series. \n input provided was {}.".format(type(input_data)))
     
     for taxon, cnp in input_data.groupby('sample_id'):
         cn_str = aggregate_copy_number_profile(cnp)
@@ -312,8 +312,8 @@ def create_df_from_fsa(input_df: pd.DataFrame, fsa, separator: str = 'X'):
 
     alleles = input_df.columns
     if not isinstance(fsa, dict):
-        raise MEDICCError("fsa input to create_df_from_fsa has to be a dict"
-                          "Input type is {}".format(type(fsa)))
+        raise MEDICCError("fsa input to create_df_from_fsa has to be a dict, "
+                          "input type is {}.".format(type(fsa)))
 
     nr_alleles = len(alleles)
     samples = input_df.index.get_level_values('sample_id').unique()
@@ -327,7 +327,7 @@ def create_df_from_fsa(input_df: pd.DataFrame, fsa, separator: str = 'X'):
         cns = tools.fsa_to_string(fsa[node]).split(separator)
         if len(cns) % nr_alleles != 0:
             raise MEDICCError('For sample {} we have {} haplotype-specific chromosomes for {} alleles'
-                              '\nnumber of chromosomes has to be divisible by nr of alleles'.format(node,
+                              '\n Number of chromosomes has to be divisible by the number of alleles.'.format(node,
                                                                                                     len(cns),
                                                                                                     nr_alleles))
         nr_chroms = int(len(cns) // nr_alleles)
@@ -347,17 +347,17 @@ def create_df_from_fsa(input_df: pd.DataFrame, fsa, separator: str = 'X'):
 
 def create_df_from_phasing_fsa(input_df: pd.DataFrame, fsas, separator: str = 'X'):
     """ 
-    Takes a two FSAs dicts from phasing and extracts the copy number profiles.
+    Takes two FSAs dicts from phasing and extracts the copy number profiles.
     The allele names are taken from the input_df columns and the returned data frame has the same 
     number of rows and row index as the input_df. """
 
     alleles = input_df.columns
     if len(fsas) != 2:
-        raise MEDICCError("fsas has to be of length 2")
+        raise MEDICCError("Expected exactly two FSAs.")
     if not all([isinstance(fsa, dict) for fsa in fsas]):
-        raise MEDICCError("all fsas entries have to be dicts")
+        raise MEDICCError("All fsas entries have to be dicts.")
     if fsas[0].keys() != fsas[1].keys():
-        raise MEDICCError("fsas keys have to be the same")
+        raise MEDICCError("Fsas keys have to be the same.")
 
 
     output_df = input_df.copy()[[]]
@@ -367,7 +367,7 @@ def create_df_from_phasing_fsa(input_df: pd.DataFrame, fsas, separator: str = 'X
         cns_a = tools.fsa_to_string(fsas[0][sample]).split(separator)
         cns_b = tools.fsa_to_string(fsas[1][sample]).split(separator)
         if len(cns_a) != len(cns_b):
-            raise MEDICCError(f"length of alleles is not the same for sample {sample}")
+            raise MEDICCError(f"The number of alleles is not the same for sample {sample}.")
 
         output_df.loc[sample, alleles[0]] = list(''.join(cns_a))
         output_df.loc[sample, alleles[1]] = list(''.join(cns_b))
@@ -406,7 +406,7 @@ def parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict
 
     parallelization_groups = medicc.tools.create_parallelization_groups(len(sample_labels))
     parallelization_groups = [sample_labels[group] for group in parallelization_groups]
-    logger.info("Running {} parallel runs on {} cores".format(len(parallelization_groups), n_cores))
+    logger.info("Running {} parallel runs on {} cores.".format(len(parallelization_groups), n_cores))
 
     parallel_pairwise_distances = Parallel(n_jobs=n_cores)(delayed(calc_pairwise_distance_matrix)(
         asymm_fst, {key: val for key, val in CN_str_dict.items() if key in cur_group}, True)
@@ -448,7 +448,7 @@ def calc_pairwise_distance_matrix(model_fst, cn_str_dict, parallel_run=True):
         pdm.loc[sample_b, sample_a] = cur_dist
 
         if not parallel_run and (100 * (i + 1) / ncombs) % 10 == 0:  # log every 10%
-            logger.info(f'{(i + 1) / ncombs * 100:.2f}')
+            logger.info(f'Progress: {(i + 1) / ncombs * 100:.2f}%')
 
     return pdm
 
@@ -484,8 +484,8 @@ def update_branch_lengths(tree, fst, ancestor_fsa, normal_name='diploid'):
             fst, ancestor_fsa[normal_name], ancestor_fsa[child_clade.name]))
 
     if not isinstance(ancestor_fsa, dict):
-        raise MEDICCError("input ancestor_fsa to function update_branch_lengths has to be either a dict"
-                          "provided type is {}".format(type(ancestor_fsa)))
+        raise MEDICCError("input ancestor_fsa to function update_branch_lengths has to be a dict, "
+                          "provided type is {}.".format(type(ancestor_fsa)))
 
     def _distance_to_child(fst, ancestor_fsa, sample_1, sample_2):
         return float(fstlib.score(fst, ancestor_fsa[sample_1], ancestor_fsa[sample_2]))
@@ -539,7 +539,7 @@ def summarize_patient(tree, pdm, sample_labels, normal_name='diploid', events_df
     else:
         if "wgd" in events_df['type'].values:
             wgd_status = "WGD on branch " + \
-                "and ".join(events_df.loc[events_df['type'] ==
+                " and ".join(events_df.loc[events_df['type'] ==
                                           'wgd'].index.get_level_values('sample_id'))
         else:
             wgd_status = "no WGD"
@@ -562,7 +562,7 @@ def summarize_patient(tree, pdm, sample_labels, normal_name='diploid', events_df
 
 def detect_wgd(input_df, sample, total_cn=False, wgd_x2=False, n_wgd=None):
     if n_wgd is not None and n_wgd > 2:
-        raise NotImplementedError("MEDICC can only detect WGDs with n_wgd <= 2")
+        raise NotImplementedError("MEDICC can only detect WGDs with n_wgd <= 2.")
 
     if n_wgd is None:
         wgd_fst = io.read_fst(total_copy_numbers=total_cn, wgd_x2=wgd_x2, n_wgd=n_wgd)
@@ -589,8 +589,8 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
     """
     Iterated steepest-ascent NNI hill-climbing with plateau traversal
 
-    At each sweep: enumerate all NNI neighbors of every tree in the currrent frontier, evluate each via incremental
-    ancesotr reconstruction, and accept the globally best set.
+    At each sweep: enumerate all NNI neighbors of every tree in the current frontier, evaluate each via incremental
+    ancestor reconstruction, and accept the globally best set.
 
     Stop when a full sweep produces no improvement/tie, or nni_max_iter (maximum number of trees explored) is reached.
 
@@ -623,7 +623,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
     update_branch_lengths(tree, lower_pass_fst, ancestors, normal_name)
     current_score = medicc.tools.sum_of_branch_length(tree)
     trace = [current_score]
-    logger.info(f"NNI mode: initial score = {current_score}")
+    logger.info(f"NNI mode: initial score = {current_score}.")
 
     frontier = [(tree, ancestors, uppass_cache)] # trees still to be expanded in the coming sweep
     solutions = [(t, a) for t, a, _ in frontier] # current best solutions
@@ -761,7 +761,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                 break
 
         if not best_candidates:
-            logger.info(f"NNI mode: sweep {sweep}: no neighbors enumerated, terminating")
+            logger.info(f"NNI mode: sweep {sweep}: no neighbors enumerated, terminating.")
             break
 
         if best_score < current_score:
@@ -783,7 +783,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
             if not new_candidates:
                 logger.info(
                     f"NNI mode: sweep {sweep}: evaluated {n_evaluated} neighbors across "
-                    f"{len(frontier)} frontier tree(s), plateau exhausted — no new  "
+                    f"{len(frontier)} frontier tree(s), plateau exhausted — no new "
                     f"co-optimal neighbor(s) at score {current_score}, terminating with "
                     f"{len(solutions)} co-optimal tree(s)"
                 )
@@ -812,7 +812,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
 
     if max_nni_reached:
         logger.warning(
-            f"NNI mode: reached nni_max_iter={nni_max_iter} total neighbors evaluated "
+            f"NNI mode: reached --nni-max-topology={nni_max_iter} total neighbors evaluated "
             f"without converging — hard cap hit; returning {len(solutions)} co-optimal "
             f"tree(s) at score {current_score}"
         )

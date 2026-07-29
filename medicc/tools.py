@@ -6,7 +6,7 @@ import fstlib
 import numpy as np
 import pandas as pd
 
-logger = logging.getLogger('medicc.io')
+logger = logging.getLogger(__name__)
 
 def set_sequences_on_tree_from_df(tree: Bio.Phylo.BaseTree, df: pd.DataFrame, clear_before=True):
     """DEPRECATED!
@@ -18,7 +18,7 @@ def set_sequences_on_tree_from_df(tree: Bio.Phylo.BaseTree, df: pd.DataFrame, cl
         df (pd.DataFrame): DataFrame with copy number information
         clear_before (bool, optional): Clear old sequences. Defaults to True.
     """
-    raise DeprecationWarning("This function is deprecated and is not used anymore. ")
+    raise DeprecationWarning("This function is deprecated and is not used anymore.")
 
     if not hasattr(tree.root, 'sequences'):
         tree = tree.as_phyloxml()
@@ -47,7 +47,7 @@ def int2hex(x):
 
 def format_chromosomes(ds):
     """ Expects pandas Series with chromosome names. 
-    The goal is to take recognisalbe chromosome names, i.e. chr4 or chrom3 and turn them into chr3 format.
+    The goal is to take recognisable chromosome names, i.e. chr4 or chrom3 and turn them into chr3 format.
     If the chromosomes names are not recognized, return them unchanged."""
 
     ds = ds.astype('str')
@@ -66,9 +66,9 @@ def format_chromosomes(ds):
             chrcats += ['chrY',]
         newchr = pd.Categorical(newchr, categories=chrcats)
     else:
-        logger.warning("Could not match the chromosome labels. Rename the chromosomes according chr1, "
-                    "chr2, ... to avoid potential errors."
-                    "Current format: {}".format(ds.unique()))
+        logger.warning("Could not match the chromosome labels. Rename the chromosomes to follow the chr1, "
+                    "chr2, ... convention to avoid potential errors. "
+                    "Current format: {}.".format(ds.unique()))
         newchr = pd.Categorical(ds, categories=ds.unique())
     assert not newchr.isna().any(), "Could not reformat chromosome labels. Rename according to chr1, chr2, ..."
     return newchr
@@ -99,7 +99,7 @@ def create_parallelization_groups(number_samples):
 
 
     Method implemented as proposed in:
-    Emmanuel Sapin, Matthew C Keller, Novel approach for parallelizing pairwise comparison problems as applied to detecting segments identical by decent in whole-genome data, 
+    Emmanuel Sapin, Matthew C Keller, Novel approach for parallelizing pairwise comparison problems as applied to detecting segments identical by descent in whole-genome data,
     Bioinformatics, 2021;, btab084, https://doi.org/10.1093/bioinformatics/btab084
     '''
     p = next_prime(number_samples)
@@ -125,7 +125,7 @@ def total_pdm_from_parallel_pdms(sample_labels, parallel_pdms):
         total_pdm.loc[cur_pdm.index, cur_pdm.index] = cur_pdm
 
     if total_pdm.isna().sum().sum() != 0:
-        raise ValueError('Something went wrong with these indices:\n{}'.format(
+        raise ValueError('Could not compute pairwise distances for these sample pairs indices:\n{}'.format(
             np.where(total_pdm.isna())))
 
     return total_pdm

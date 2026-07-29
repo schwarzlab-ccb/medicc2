@@ -29,8 +29,8 @@ def _group_nodes_by_depth(clade_list, normal_name):
     """
     Group internal nodes by depth in the tree
 
-    Given a preorder claide_list (excluding normal), assigns each node a depth from the root and returns a dict mapping
-    depth -> list of nodes that depth. Only internal nodes are included.
+    Given a preorder clade_list (excluding normal), assigns each node a depth from the root and returns a dict mapping
+    depth -> list of nodes at that depth. Only internal nodes are included.
 
     Used for parallel ancestral reconstruction, and parallelism is limited by tree shape -- a highly unbalanced (caterpillar)
     tree has at most 1 node per depth level, yielding no parallelism. Balanced binary trees benefit most.
@@ -116,7 +116,7 @@ def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, lower_pass_fst, no
                     fsa_dict[child.name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
     else:
         # parallel pipeline
-        logger.info(f"Ancestor reconstruction using {n_cores} threads: Up the tree")
+        logger.info(f"Ancestor reconstruction using {n_cores} worker processes: Up the tree")
         levels = _group_nodes_by_depth(clade_list, normal_name)
         for depth in sorted(levels.keys(), reverse=True):
             nodes_at_depth = [n for n in levels[depth] if len(n.clades) != 0]
@@ -124,7 +124,7 @@ def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, lower_pass_fst, no
                 continue
 
 
-            if len(nodes_at_depth) > 1: # if one node you pay parallize overhead for nothing
+            if len(nodes_at_depth) > 1: # if one node, you pay parallelization overhead for nothing
                 results = Parallel(n_jobs=n_cores)(
                     delayed(_intersect_task)(
                         fsa_dict[[c for c in node.clades if c.name != normal_name][0].name],
@@ -153,7 +153,7 @@ def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, lower_pass_fst, no
         sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
         fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
-        logger.debug(f"Ancestor reconstruction using {n_cores} threads: Down the tree")
+        logger.debug(f"Ancestor reconstruction using {n_cores} worker processes: Down the tree")
         # Down the tree (root to leaf), level by level
         for depth in sorted(levels.keys()):
             pairs = []
@@ -222,7 +222,7 @@ def reconstruct_ancestors_incremental(tree, samples_dict, upper_pass_fst, lower_
     fsa_dict = old_uppass_cache | samples_dict
     clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
 
-    logger.debug("Incremental ancestral reconstuction: Up the tree for only the dirty nodes")
+    logger.debug("Incremental ancestral reconstruction: Up the tree for only the dirty nodes")
     for node in dirty_nodes_l:
         children = [item for item in node.clades if item.name != normal_name]
         left_name = children[0].name
@@ -237,13 +237,13 @@ def reconstruct_ancestors_incremental(tree, samples_dict, upper_pass_fst, lower_
 
     new_uppass_cache = {node.name: fsa_dict[node.name] for node in clade_list if len(node.clades) != 0}
 
-    logger.debug("Incremental ancestral reconstuction for root")
+    logger.debug("Incremental ancestral reconstruction for root")
     # root node is calculated separately w.r.t. normal node
     root_name = clade_list[0].name
     sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
     fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
-    logger.info("Incremental ancestral reconstuction: Down the tree")
+    logger.info("Incremental ancestral reconstruction: Down the tree")
     # down the tree (root to leaf)
     for node in clade_list:
         if len(node.clades) != 0:

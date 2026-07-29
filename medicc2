@@ -18,9 +18,9 @@ version_string = f'medicc {medicc.__version__} from {os.path.dirname(medicc.__fi
 
 parser = argparse.ArgumentParser()
 parser.add_argument("input_file",
-                    help="a path to the input file")
+                    help="Path to the input file")
 parser.add_argument("output_dir",
-                    help="a path to the output folder")
+                    help="Path to the output folder")
 parser.add_argument('--version', action='version', version=version_string)
 parser.add_argument("--input-type", "-i", type=str, dest="input_type", default="t",
                     choices=["f", "t", "fasta", "tsv"], required=False,
@@ -41,25 +41,25 @@ parser.add_argument("--input-chr-separator",
 parser.add_argument("--tree",
                     action="store",
                     dest="user_tree",
-                    help="Do not reconstruct tree, use provided tree instead (in newick format) and only perform ancestral reconstruction (default: None).",
+                    help="Do not reconstruct a tree, use the provided tree instead (in newick format) and only perform ancestral reconstruction (default: None).",
                     required=False)
 parser.add_argument("--topology-only", "-s",
                     action="store_true",
                     dest="topology_only",
                     help="Output only tree topology, without reconstructing ancestors (default: False).",
                     required=False)
-parser.add_argument("--length-aware-ancestors", "-la-ancestors",
+parser.add_argument("--length-aware-ancestors", "-la",
                     action="store_true",
                     dest="length_aware_ancestors",
                     default=False,
-                    help="Use the matched event-counting FST for the upper pass and length-encoding FST for lower-pass ancestral selection. NJ distances and reported branch lengths remain event-counted.")
+                    help="Use the matched event-counting FST for the upper pass and length-encoding FST for lower-pass ancestral selection. MEDICC distance matrix and reported branch lengths remain event-counted.")
 parser.add_argument("--nni-mode", action="store_true", default=False, dest='nni_mode',
-                    help="Launch medicc2's Nearest Neighbor Interchange(NNI) topology search.")
-parser.add_argument("--nni-max-topology", type=int, default=20000, dest='nni_max_iter', help="Maximum number of topologies NNI explores")
+                    help="Launch Nearest Neighbor Interchange (NNI) topology search.")
+parser.add_argument("--nni-max-topology", type=int, default=20000, dest='nni_max_iter', help="Hard cap on the total number of NNI neighbor evaluations across all sweeps.")
 parser.add_argument("--nni-export-all-topology", action="store_true", default=False, dest='nni_export_all_topology',
-                    help="Export all co-optimal topologies NNI found.")
+                    help="Export all co-optimal topologies that NNI found.")
 parser.add_argument("--nni-complete-log", action="store_true", default=False, dest='nni_complete_log',
-                    help="Export complete log of NNI mode.")
+                    help="Write a complete per-sweep trace of NNI mode (topology and score at every step) to <output_dir>/nni-trace/.")
 parser.add_argument("--normal-name", "-n",
                     default="diploid",
                     type=str,
@@ -79,30 +79,30 @@ parser.add_argument("--filter-segment-length",
                     dest='filter_segment_length',
                     default=None,
                     required=False,
-                    help="Removes segments that are smaller than specified length.")
+                    help="Removes segments that are smaller than the specified length.")
 parser.add_argument("--bootstrap-method",
                     type=str,
                     dest='bootstrap_method',
                     default='chr-wise',
                     required=False,
-                    help="Bootstrap method. Has to be either 'chr-wise' or 'segment-wise'")
+                    help="Bootstrap method: either 'chr-wise' or 'segment-wise'.")
 parser.add_argument("--bootstrap-nr",
                     type=int,
                     dest='bootstrap_nr',
                     default=None,
                     required=False,
-                    help="Number of bootstrap runs to perform")
+                    help="Number of bootstrap runs to perform (minimum 5).")
 parser.add_argument("--prefix", '-p', type=str, dest='prefix', default=None,
                     help='Output prefix to be used (default: input filename).', required=False)
 parser.add_argument("--no-wgd", action='store_true', default=False, dest='no_wgd',
-                    help='Enable whole-genome doubling events (default: False).', required=False)
+                    help='Disable whole-genome doubling events (default: False, WGD is considered by default).', required=False)
 parser.add_argument('--plot',
                     type=str,
                     default='auto',
                     required=False,
                     choices=["auto", "bars", "heatmap", "both", "none"],
                     help="""Type of copy-number plot to save. 'bars' is recommended for <50 samples, 
-                         heatmap for more samples, 'auto' will decide based on the number of samples, 
+                         'heatmap' for more samples, 'auto' will decide based on the number of samples, 
                          'both' will plot both and 'none' will plot neither. (default: auto).""")
 parser.add_argument("--no-plot-tree", action='store_true', default=False, dest='no_plot_tree',
                     help='Disable plotting of tree (default: False).', required=False)
@@ -117,7 +117,7 @@ parser.add_argument("-j", "--n-cores",
                     dest='n_cores',
                     default=None,
                     required=False,
-                    help="Number of cores to run on")
+                    help="Number of cores to run on.")
 parser.add_argument("--events", action='store_true', default=False, dest='events',
                     help='Whether to infer copy-number events (default: False).', required=False)
 parser.add_argument("--chromosomes-bed",
@@ -125,13 +125,13 @@ parser.add_argument("--chromosomes-bed",
                     dest='chromosomes_bed',
                     default='none',
                     required=False,
-                    help="BED file for chromosome regions")
+                    help="BED file for chromosome regions.")
 parser.add_argument("--regions-bed",
                     type=str,
                     dest='regions_bed',
                     default='none',
                     required=False,
-                    help="BED file for regions of interests")
+                    help="BED file for regions of interests.")
 parser.add_argument("-v", "--verbose", action='store_true', default=False,
                     help='Enable verbose output (default: False).', required=False)
 parser.add_argument("-vv", "--debug", action='store_true', default=False,
@@ -140,12 +140,12 @@ parser.add_argument("--silent", action='store_true', default=False,
                     help='Hide all output (default: False).', required=False)
 parser.add_argument("--maxcn", type=int, dest='maxcn', default=8,
                     help='''Expert option: maximum CN at which the input is capped. Does not change FST.
-                            The maximum possible value is 8. Default: 8''')
+                            The maximum possible value is 8 (default: 8)''')
 parser.add_argument("--prune-weight", type=int, dest='prune_weight', default=0,
                     help='''Expert option: Prune weight in ancestor reconstruction. Values >0 might
-                            result in more accurate ancestors but will require more time and memory. Default: 0''')
+                            result in more accurate ancestors but will require more time and memory (default: 0)''')
 parser.add_argument("--fst", type=str, dest='fst', default=None,
-                    help='Expert option: path to an alternative FST. Warning: this option is deprecated, to maintain the same behavior replace --fst File to --upper-fst File --lower-fst File')
+                    help='Expert option: path to an alternative FST. Deprecated, to keep the same behavior, replace \'--fst File\' with \'--upper-fst File --lower-fst File\'')
 parser.add_argument("--upper-fst", type=str, dest='upper_fst', default=None,
                     help='Expert option: path to an alternative upper FST.')
 parser.add_argument("--lower-fst", type=str, dest='lower_fst', default=None,
@@ -153,7 +153,7 @@ parser.add_argument("--lower-fst", type=str, dest='lower_fst', default=None,
 parser.add_argument("--fst-chr-separator", type=str, dest='fst_chr_separator', default='X',
                     help = 'Expert option: character used to separate chromosomes in the FST (default: \"X\").')
 parser.add_argument("--wgd-x2", action='store_true', default=False, dest='wgd_x2',
-                    help='Expert option: Treat WGD as a x2 operation (default: False).', required=False)
+                    help='Expert option: treat WGD as an x2 operation (default: False).', required=False)
 args = parser.parse_args()
 
 
@@ -170,12 +170,12 @@ if args.bootstrap_nr is not None and (args.bootstrap_nr < 5):
     raise ValueError('bootstrap_nr must be at least 5.')
 if args.nni_mode:
     if args.topology_only:
-        raise ValueError("Nearest Neighbour Interchange mode requires ancestral reconstruction and thus no topology only allowed.")
+        raise ValueError("NNI mode requires ancestral reconstruction, so --topology-only cannot be used together with --nni-mode.")
     if args.nni_export_all_topology and args.bootstrap_nr is not None:
-        raise ValueError("Bootstrapping nearest neighbor interchange's all-topology export is currently not supported.")
+        raise ValueError("--nni-export-all-topology cannot be combined with --bootstrap-nr / --bootstrap-method: bootstrapping requires a single reference tree.")
 else:
     if args.nni_export_all_topology or args.nni_complete_log:
-        raise ValueError("Nearest Neighbour Interchange related flags are only valid when --nni-mode is enabled.")
+        raise ValueError("--nni-export-all-topology and --nni-complete-log are only valid when --nni-mode is enabled.")
 
 output_dir = args.output_dir
 if args.nni_complete_log:
@@ -217,7 +217,7 @@ if selected_fst_modes > 1:
                  "--length-aware-ancestors are mutually exclusive.")
 
 if args.fst is not None:
-    logging.warning("Warning: fst flag is deprecated, to maintain the same behavior replace --fst File with --upper-fst File and --lower-fst File.")
+    logging.warning("--fst is deprecated; to keep the same behavior, use --upper-fst File --lower-fst File instead.")
     upper_fst_path = args.fst
     upper_pass_fst = medicc.io.read_fst(user_fst=upper_fst_path,
                                         no_wgd=args.no_wgd,
@@ -282,7 +282,7 @@ input_df = medicc.io.read_and_parse_input_data(
 if args.filter_segment_length is not None:
     old_size = len(input_df)
     input_df = medicc.io.filter_by_segment_length(input_df, args.filter_segment_length)
-    logger.info("Removed input segments smaller than {}bp. Old size: {} -> new size:{}".format(
+    logger.info("Removed input segments smaller than {}bp. Old size: {} -> new size: {}".format(
         int(float(args.filter_segment_length)),
         old_size, 
         len(input_df)))
@@ -356,7 +356,7 @@ else:
             nni_trace_dir=nni_trace_dir,
             nni_export_all_topology=True)
 
-        # Handel all topology file io
+        # Handle all topology file io
         # Write results
         topology_counter = 1
         for i in range(len(final_tree_l)):
@@ -370,7 +370,7 @@ else:
             os.makedirs(topology_dir, exist_ok=True)
 
             # Write trees
-            logger.info(f"Writing tree_topology_{topology_counter}.")
+            logger.info(f"Writing tree for topology {topology_counter}.")
             medicc.io.write_tree_files(tree=final_tree, normal_name=normal_name, out_name=os.path.join(
                 topology_dir, output_prefix + f"_final_tree_topology_{topology_counter}"),
                                        plot_tree=(not args.no_plot_tree))
@@ -415,7 +415,7 @@ else:
                 plotting = [args.plot]
 
             if 'bars' in plotting:
-                logger.info(f"Plotting copy-number profiles (bars) for topology_{topology_counter}.")
+                logger.info(f"Plotting copy-number profiles (bars) for topology {topology_counter}.")
                 p = medicc.plot.plot_cn_profiles(
                     output_df,
                     input_tree=final_tree,
@@ -429,7 +429,7 @@ else:
                 plt.close(p)
 
             if 'heatmap' in plotting:
-                logger.info(f"Plotting copy-number profiles (heatmap) for topology_{topology_counter}.")
+                logger.info(f"Plotting copy-number profiles (heatmap) for topology {topology_counter}.")
                 p = medicc.plot.plot_cn_heatmap(
                     output_df,
                     final_tree=final_tree,
@@ -442,7 +442,7 @@ else:
 
             if 'none' in plotting:
                 logger.info(
-                    f"Skipped plotting of copy-number profiles (change --plot if this is undesired) for topology_{topology_counter}.")
+                    f"Skipped plotting of copy-number profiles (change --plot if this is undesired) for topology {topology_counter}.")
 
 
     # Write NNI log and plot nni_trace
@@ -469,7 +469,7 @@ medicc.io.write_pairwise_distances(sample_labels, pairwise_distances, os.path.jo
     output_dir, output_prefix + "_pairwise_distances"))
 
 if args.nni_export_all_topology:
-    logger.info("Done.")
+    logger.info("MEDICC2 has finished.")
     sys.exit(0)
 
 # Write events table and overlap events with chromosome and oncogenes
@@ -497,7 +497,7 @@ medicc.io.write_tree_files(tree=final_tree, normal_name=normal_name, out_name=os
 medicc.io.write_branch_lengths(tree=final_tree, out_name=os.path.join(
     output_dir, output_prefix + "_branch_lengths.tsv"))
 
-# Write ouput table
+# Write output table
 if not args.topology_only:
     output_df.to_csv(os.path.join(output_dir, output_prefix + "_final_cn_profiles.tsv"), sep='\t')
 
@@ -505,7 +505,7 @@ if not args.topology_only:
 logger.info("Writing patient summary.")
 summary = medicc.summarize_patient(
     final_tree, pairwise_distances.values, sample_labels, normal_name, events_df)
-logger.info(f"Final tree length {summary.tree_length}.")
+logger.info(f"Final tree length (sum of branch length): {summary.tree_length}.")
 summary.to_csv(os.path.join(output_dir, output_prefix + "_summary.tsv"),
                index=True, header=False, sep='\t')
 
@@ -520,7 +520,7 @@ if args.bootstrap_nr is not None:
                                                                       normal_name=normal_name,
                                                                       n_cores=args.n_cores)
 
-    logger.info('Writing bootstrap output')
+    logger.info('Writing bootstrap output.')
     with open(os.path.join(output_dir, output_prefix + "_bootstrap_trees_df.pickle"), 'wb') as f:
         pickle.dump(bootstrap_trees_df, f)
 
@@ -573,6 +573,6 @@ if 'heatmap' in plotting:
     plt.close(p)
 
 if 'none' in plotting:
-    logger.info("Skipped plotting of copy-number profiles (change --plot if this is undesired)")
+    logger.info("Skipped plotting of copy-number profiles (change --plot if this is undesired).")
 
 logger.info("MEDICC2 has finished.")

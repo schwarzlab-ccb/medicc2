@@ -72,10 +72,10 @@ def plot_cn_profiles(
     df = input_df.copy()
     df[allele_columns] = df[allele_columns].astype(int)
     if len(allele_columns) > 2:
-        logger.warning("More than two allels were provided ({})\n"
-                    "Copy number tracks can only be plotted for 1 or 2 alleles".format(allele_columns))
+        logger.warning("More than two alleles were provided ({})\n"
+                    "Copy number tracks can only be plotted for 1 or 2 alleles.".format(allele_columns))
     if len(np.setdiff1d(allele_columns, df.columns)):
-        logger.warning("Some provided allele_columns are not in the dataframe"
+        logger.warning("Some provided allele_columns are not in the dataframe. "
                     "These are: {}".format(np.setdiff1d(allele_columns, df.columns)))
 
     if np.setdiff1d(['is_clonal', 'is_normal', 'is_gain', 'is_loss', 'is_wgd'], df.columns).size > 0:
@@ -132,7 +132,7 @@ def plot_cn_profiles(
 
     if nsamp > 20:
         logger.warning('More than 20 samples were provided. Creating the copy number tracks will take '
-                    'a long time to process and might crash. Best to use plot_cn_heatmap instead')
+                    'a long time to process and might crash. Consider using plot_cn_heatmap instead.')
 
     df.reset_index(['start','end'], inplace=True)
 
@@ -895,7 +895,7 @@ def plot_cn_heatmap(input_df, final_tree=None, y_posns=None, cmax=None, total_co
     total_gaps = gaps[gaps>0].sum()
     if total_gaps > 1e8:
         logger.warning(f"Total of {total_gaps:.1e} bp gaps in the segmentation. These missing "
-                    "segments are not reflected in the plot!")
+                    "segments are not reflected in the plot.")
 
     ind = [y_posns.get(x, -1) for x in cur_sample_labels]
 

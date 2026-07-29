@@ -65,7 +65,7 @@ def segment_wise_jacknife_df(input_df):
 def bootstrap_shuffle_chroms(input_df, normal_name='diploid'):
     """Creates a bootstrap dataframe based on the original data. The chromosome-wise copy-number data 
     will be shuffled between samples. The corresponding dataframe will be generally similar to the
-    original data but have to no the distinct features of the original data.
+    original data but lack the distinct features.
     It can therefore not be used to calculate branch support or similar scores.
     """
 
@@ -108,7 +108,7 @@ def _bitstrs(tree):
 
 
 def compare_trees(tree1, tree2, fail_on_different_terminals=True):
-    """Compare to trees topologies. The length of the branches are not regarded.
+    """Compare two tree topologies. The length of the branches are not regarded.
 
     If fail_on_different_terminals is set to True the function fails if the terminals are not the
     same. This prevents accidental comparison of the wrong trees.
@@ -120,7 +120,7 @@ def compare_trees(tree1, tree2, fail_on_different_terminals=True):
     # false if terminals are not the same
     if set(term_names1) != set(term_names2):
         if fail_on_different_terminals:
-            raise ValueError("Leaf names of the two trees are not the same:\ntree 1: {}\ntree 2:{}".format(
+            raise ValueError("Leaf names of the two trees are not the same:\ntree 1: {}\ntree 2: {}.".format(
                 set(term_names1), set(term_names2)))
         else:
             return False
@@ -181,7 +181,7 @@ def run_bootstrap(input_df,
         logger.info('Starting {} segment-wise jackknife runs'.format(N_bootstrap))
         bootstrap_method = segment_wise_jacknife_df
     else:
-        raise ValueError('method has to be either chr-wise or segment-wise')
+        raise ValueError('method has to be either chr-wise or segment-wise.')
 
     if seed is not None:
         np.random.seed(seed)

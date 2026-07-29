@@ -191,7 +191,7 @@ def calculate_cn_events_per_branch(cur_df, parent_name, child_name, alleles=['cn
     loh_pos = (cur_parent_cn == 0)
 
     # 2. WGDs
-    # only check if >30% of is gained
+    # only check if >30% of the genome is gained
     wgd_candidate_threshold = 0.3
 
     widths = cur_df.loc[[child_name]].eval('end+1-start')
@@ -349,7 +349,7 @@ def overlap_events(events_df=None, output_df=None, tree=None, overlap_threshold=
     try:
         import pyranges as pr
     except ImportError:
-        raise ImportError("You have to install pyranges to overlap events with regions of interest") from None       
+        raise ImportError("You have to install pyranges to overlap events with regions of interest.") from None
 
     if chromosome_bed == 'none':
         chromosome_bed = None
