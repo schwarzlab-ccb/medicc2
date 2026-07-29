@@ -166,9 +166,13 @@ if args.silent:
     logger.setLevel(logging.CRITICAL)
 
 # Handle impossible combinations of command line flags
+if args.bootstrap_nr is not None and (args.bootstrap_nr < 5):
+    raise ValueError('bootstrap_nr must be at least 5.')
 if args.nni_mode:
     if args.topology_only:
         raise ValueError("Nearest Neighbour Interchange mode requires ancestral reconstruction and thus no topology only allowed.")
+    if args.nni_export_all_topology and args.bootstrap_nr is not None:
+        raise ValueError("Bootstrapping nearest neighbor interchange's all-topology export is currently not supported.")
 else:
     if args.nni_export_all_topology or args.nni_complete_log:
         raise ValueError("Nearest Neighbour Interchange related flags are only valid when --nni-mode is enabled.")
