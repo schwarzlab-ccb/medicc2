@@ -35,7 +35,7 @@ def main(input_df,
          nni_mode_flag=False,
          nni_max_iter=20000,
          nni_trace_dir=None,
-         nni_export_all_topology=False):
+         nni_export_all_topology=False, la_nni=False):
     """ MEDICC Main Method """
 
     symbol_upper_table = asymm_upper_fst.input_symbols()
@@ -132,6 +132,7 @@ def main(input_df,
             nni_max_iter=nni_max_iter,
             n_cores=n_cores,
             nni_trace_dir=nni_trace_dir,
+            la_nni=la_nni,
         )
 
         nni_trace = nni_result["trace"]
@@ -140,13 +141,38 @@ def main(input_df,
         if nni_export_all_topology:
             final_tree_l = nni_result["best_trees"]
             ancestors_l = nni_result["best_ancestors"]
+
+            ancestors_l_reconstruct = [];  use_reconstruct = False
             for i, final_tree in enumerate(final_tree_l):
                 ancestors_i = ancestors_l[i]
+                if (not la_nni) and (not fstlib.equal(asymm_upper_fst, asymm_lower_fst)):
+                    ancestors_i = medicc.reconstruct_ancestors(tree=final_tree,
+                                                               samples_dict=FSA_dict,
+                                                               upper_pass_fst=asymm_upper_fst,
+                                                               lower_pass_fst=asymm_lower_fst,
+                                                               normal_name=normal_name,
+                                                               prune_weight=prune_weight,
+                                                               n_cores=n_cores,
+                                                               upper_cache=False)
+                    ancestors_l_reconstruct.append(ancestors_i)
+                    use_reconstruct = True
                 _wrap_tree_for_output(final_tree, asymm_upper_fst, ancestors_i, normal_name)
-            output_df_l = [create_df_from_fsa(input_df, ancestors_i) for ancestors_i in ancestors_l]
+            if not use_reconstruct:
+                output_df_l = [create_df_from_fsa(input_df, ancestors_i) for ancestors_i in ancestors_l]
+            else:
+                output_df_l = [create_df_from_fsa(input_df, ancestors_i) for ancestors_i in ancestors_l_reconstruct]
         else:
             final_tree = nni_result["best_trees"][0]
             ancestors = nni_result["best_ancestors"][0]
+            if (not la_nni) and (not fstlib.equal(asymm_upper_fst, asymm_lower_fst)):
+                ancestors = medicc.reconstruct_ancestors(tree=final_tree,
+                                                         samples_dict=FSA_dict,
+                                                         upper_pass_fst=asymm_upper_fst,
+                                                         lower_pass_fst=asymm_lower_fst,
+                                                         normal_name=normal_name,
+                                                         prune_weight=prune_weight,
+                                                         n_cores=n_cores,
+                                                         upper_cache=False)
             _wrap_tree_for_output(final_tree, asymm_upper_fst, ancestors, normal_name)
             logger.info("NNI mode: Creating output copy-number profiles.")
             output_df = create_df_from_fsa(input_df, ancestors)
@@ -585,7 +611,7 @@ def detect_wgd(input_df, sample, total_cn=False, wgd_x2=False, n_wgd=None):
     return distance_wgd < distance_no_wgd
 
 def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="diploid", prune_weight=0,
-             nni_max_iter=20000, n_cores=None, nni_trace_dir=None):
+             nni_max_iter=20000, n_cores=None, nni_trace_dir=None, la_nni=False):
     """
     Iterated steepest-ascent NNI hill-climbing with plateau traversal
 
@@ -610,17 +636,65 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                 result.append((t, anc, cache))
         return result
 
+    def _ancestor_reconstruction_wrapper(tree, samples_dict, upper_pass_fst, lower_pass_fst,
+                                         normal_name, prune_weight, n_cores, la_nni):
+        if la_nni:
+            return medicc.ancestors.reconstruct_ancestors(tree=tree,
+                                                          samples_dict=samples_dict,
+                                                          upper_pass_fst=upper_pass_fst,
+                                                          lower_pass_fst=lower_pass_fst,
+                                                          normal_name=normal_name,
+                                                          prune_weight=prune_weight,
+                                                          n_cores=n_cores, upper_cache=True)
+        else:
+            return medicc.ancestors.reconstruct_ancestors(tree=tree,
+                                                          samples_dict=samples_dict,
+                                                          upper_pass_fst=upper_pass_fst,
+                                                          lower_pass_fst=upper_pass_fst,
+                                                          normal_name=normal_name,
+                                                          prune_weight=prune_weight,
+                                                          n_cores=n_cores, upper_cache=True)
+
+    def _reconstruct_ancestors_incremental_wrapper(tree, samples_dict, upper_pass_fst, lower_pass_fst,
+                                                     normal_name, prune_weight, old_uppass_cache, nni_move, la_nni):
+        if la_nni:
+            return medicc.ancestors.reconstruct_ancestors_incremental(
+                                tree=tree,
+                                samples_dict=samples_dict,
+                                upper_pass_fst=upper_pass_fst,
+                                lower_pass_fst=lower_pass_fst,
+                                normal_name=normal_name,
+                                prune_weight=prune_weight,
+                                old_uppass_cache=old_uppass_cache,
+                                nni_move=nni_move,
+                            )
+        else:
+            return medicc.ancestors.reconstruct_ancestors_incremental(
+                                tree=tree,
+                                samples_dict=samples_dict,
+                                upper_pass_fst=upper_pass_fst,
+                                lower_pass_fst=upper_pass_fst,
+                                normal_name=normal_name,
+                                prune_weight=prune_weight,
+                                old_uppass_cache=old_uppass_cache,
+                                nni_move=nni_move,
+                            )
+
+
     assert tree.root.name == normal_name, "nni_mode expects a search-shape tree (root.name == normal_name)"
 
     # Initial full reconstruction
-    ancestors, uppass_cache = medicc.ancestors.reconstruct_ancestors(tree=tree,
-                                                                     samples_dict=samples_dict,
-                                                                     upper_pass_fst=upper_pass_fst,
-                                                                     lower_pass_fst=lower_pass_fst,
-                                                                     normal_name=normal_name,
-                                                                     prune_weight=prune_weight,
-                                                                     n_cores=n_cores, upper_cache=True)
-    update_branch_lengths(tree, lower_pass_fst, ancestors, normal_name)
+    ancestors, uppass_cache = _ancestor_reconstruction_wrapper(tree=tree,
+                                                               samples_dict=samples_dict,
+                                                               upper_pass_fst=upper_pass_fst,
+                                                               lower_pass_fst=lower_pass_fst,
+                                                               normal_name=normal_name,
+                                                               prune_weight=prune_weight,
+                                                               n_cores=n_cores, la_nni=la_nni)
+    if la_nni:
+        update_branch_lengths(tree, lower_pass_fst, ancestors, normal_name)
+    else:
+        update_branch_lengths(tree, upper_pass_fst, ancestors, normal_name)
     current_score = medicc.tools.sum_of_branch_length(tree)
     trace = [current_score]
     logger.info(f"NNI mode: initial score = {current_score}.")
@@ -649,19 +723,33 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                 n_moves = len(medicc.nni._enumerate_moves(current_tree))
                 step_start = step_offset
                 step_offset += n_moves
+                if la_nni:
+                    neighbor_results = medicc.nni.evaluate_nni_neighbors_parallel(
+                        tree=current_tree,
+                        old_uppass_cache=current_uppass_cache,
+                        samples_dict=samples_dict,
+                        normal_name=normal_name,
+                        prune_weight=prune_weight,
+                        n_cores=n_cores,
+                        upper_pass_fst=upper_pass_fst,
+                        lower_pass_fst=lower_pass_fst,
+                        visited_solutions=visited_solutions,
+                        step_start=step_start,
+                    )
+                else:
+                    neighbor_results = medicc.nni.evaluate_nni_neighbors_parallel(
+                        tree=current_tree,
+                        old_uppass_cache=current_uppass_cache,
+                        samples_dict=samples_dict,
+                        normal_name=normal_name,
+                        prune_weight=prune_weight,
+                        n_cores=n_cores,
+                        upper_pass_fst=upper_pass_fst,
+                        lower_pass_fst=upper_pass_fst,
+                        visited_solutions=visited_solutions,
+                        step_start=step_start,
+                    )
 
-                neighbor_results = medicc.nni.evaluate_nni_neighbors_parallel(
-                    tree=current_tree,
-                    old_uppass_cache=current_uppass_cache,
-                    samples_dict=samples_dict,
-                    normal_name=normal_name,
-                    prune_weight=prune_weight,
-                    n_cores=n_cores,
-                    upper_pass_fst=upper_pass_fst,
-                    lower_pass_fst=lower_pass_fst,
-                    visited_solutions=visited_solutions,
-                    step_start=step_start,
-                )
                 for neighbor_tree, new_ancestors, new_uppass_cache, score, step, nni_move in neighbor_results:
                     if new_ancestors is not None:
                         visited_solutions[get_topology_hash(neighbor_tree)] = score
@@ -672,7 +760,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                     if best_score is None or score < best_score:
                         best_score = score
                         if new_ancestors is None:
-                            new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                            new_ancestors, new_uppass_cache = _reconstruct_ancestors_incremental_wrapper(
                                 tree=neighbor_tree,
                                 samples_dict=samples_dict,
                                 upper_pass_fst=upper_pass_fst,
@@ -681,11 +769,12 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                                 prune_weight=prune_weight,
                                 old_uppass_cache=current_uppass_cache,
                                 nni_move=nni_move,
+                                la_nni=la_nni,
                             )
                         best_candidates = [(neighbor_tree, new_ancestors, new_uppass_cache)]
                     elif score == best_score:
                         if new_ancestors is None:
-                            new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                            new_ancestors, new_uppass_cache = _reconstruct_ancestors_incremental_wrapper(
                                 tree=neighbor_tree,
                                 samples_dict=samples_dict,
                                 upper_pass_fst=upper_pass_fst,
@@ -694,6 +783,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                                 prune_weight=prune_weight,
                                 old_uppass_cache=current_uppass_cache,
                                 nni_move=nni_move,
+                                la_nni=la_nni,
                             )
                         best_candidates.append((neighbor_tree, new_ancestors, new_uppass_cache))
             else:
@@ -710,7 +800,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                         score = visited_solutions[neighbor_tree_hash]
                         hash_hit = True
                     else:
-                        new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                        new_ancestors, new_uppass_cache = _reconstruct_ancestors_incremental_wrapper(
                             tree=neighbor_tree,
                             samples_dict=samples_dict,
                             upper_pass_fst=upper_pass_fst,
@@ -719,8 +809,12 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                             prune_weight=prune_weight,
                             old_uppass_cache=current_uppass_cache,
                             nni_move=nni_move,
+                            la_nni=la_nni,
                         )
-                        update_branch_lengths(neighbor_tree, lower_pass_fst, new_ancestors, normal_name)
+                        if la_nni:
+                            update_branch_lengths(neighbor_tree, lower_pass_fst, new_ancestors, normal_name)
+                        else:
+                            update_branch_lengths(neighbor_tree, upper_pass_fst, new_ancestors, normal_name)
                         score = medicc.tools.sum_of_branch_length(neighbor_tree)
                         visited_solutions[neighbor_tree_hash] = score
                     step = step_start + i
@@ -729,7 +823,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                     if best_score is None or score < best_score:
                         best_score = score
                         if hash_hit:
-                            new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                            new_ancestors, new_uppass_cache = _reconstruct_ancestors_incremental_wrapper(
                                 tree=neighbor_tree,
                                 samples_dict=samples_dict,
                                 upper_pass_fst=upper_pass_fst,
@@ -738,13 +832,14 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                                 prune_weight=prune_weight,
                                 old_uppass_cache=current_uppass_cache,
                                 nni_move=nni_move,
+                                la_nni=la_nni,
                             )
                         best_candidates = [(neighbor_tree, new_ancestors, new_uppass_cache)]
                         best_candidates_hash = {neighbor_tree_hash}
                     elif score == best_score:
                         if neighbor_tree_hash not in best_candidates_hash:
                             if hash_hit:
-                                new_ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
+                                new_ancestors, new_uppass_cache = _reconstruct_ancestors_incremental_wrapper(
                                     tree=neighbor_tree,
                                     samples_dict=samples_dict,
                                     upper_pass_fst=upper_pass_fst,
@@ -753,6 +848,7 @@ def nni_mode(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name="di
                                     prune_weight=prune_weight,
                                     old_uppass_cache=current_uppass_cache,
                                     nni_move=nni_move,
+                                    la_nni=la_nni,
                                 )
                             best_candidates.append((neighbor_tree, new_ancestors, new_uppass_cache))
                             best_candidates_hash.add(neighbor_tree_hash)
