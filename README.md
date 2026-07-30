@@ -47,6 +47,11 @@ Logging settings can be changed using the `medicc/logging_conf.yaml` file with t
 * `--input-chr-separator`: Character used to separate chromosomes in the input data (condensed FASTA only). Default: 'X'
 * `--tree`: Do not reconstruct tree, use provided tree instead (in newick format) and only perform ancestral reconstruction. Default: None
 * `--topology-only`, `-s`: Output only tree topology, without reconstructing ancestors. Default: False
+* `--length-aware-ancestors`, `-la`: Use the event-counting FST for the upper pass and the length-encoding FST for lower-pass ancestral selection, while keeping the MEDICC distance matrix and reported branch lengths event-counted. Default: False
+* `--nni-mode`: Refine the tree topology with Nearest Neighbor Interchange (NNI) search after the initial neighbor-joining/supplied tree. See "Nearest Neighbor Interchange (NNI) search" below. Default: False
+* `--nni-max-topology`: Hard cap on the total number of NNI neighbor evaluations across all search sweeps (an evaluation budget, not a count of distinct topologies). Only relevant with `--nni-mode`. Default: 20000
+* `--nni-export-all-topology`: Export every co-optimal topology NNI found, instead of just the first one, each into its own output subfolder. Only relevant with `--nni-mode`; cannot be combined with bootstrapping. Default: False
+* `--nni-complete-log`: Write a complete per-sweep trace of NNI mode (topology and score at every step) to `<output_dir>/nni-trace/`. Only relevant with `--nni-mode`. Default: False
 * `--normal-name`, `-n`: ID of the sample to be treated as the normal sample. Trees are rooted at this sample for ancestral reconstruction. If the sample ID is not found, an artificial normal sample of the same name is created with CN states = 1 for each allele. Default: 'diploid'
 * `--exclude-samples`, `-x`: Comma separated list of sample IDs to exclude. Default: None
 * `--filter-segment-length`: Removes segments that are smaller than specified length (measured in bp's). Default: None
@@ -63,11 +68,15 @@ Logging settings can be changed using the `medicc/logging_conf.yaml` file with t
 * `--regions-bed`: BED file for regions of interest to compare copy-number events to
 * `-v`, `--verbose`: Enable verbose output. Default: False
 * `-vv`, `--debug`: Enable more verbose output Default: False
+* `--silent`: Hide all output. Default: False
 * `--maxcn`: Expert option: maximum CN at which the input is capped. Does not change FST. The maximum possible value is 8. Default: 8
 * `--prune-weight`: Expert option: Prune weight in ancestor reconstruction. Values >0 might result in more accurate ancestors but will require more time and memory. Default: 0
-* `--fst`: Expert option: path to an alternative FST. Default: None
+* `--fst`: Expert option: path to an alternative FST. **Deprecated** — use `--upper-fst`/`--lower-fst` instead. Default: None
+* `--upper-fst`: Expert option: path to an alternative upper FST. Must be given together with `--lower-fst`. Default: None
+* `--lower-fst`: Expert option: path to an alternative lower FST. Must be given together with `--upper-fst`. Default: None
 * `--fst-chr-separator`: Expert option: character used to separate chromosomes in the FST. Default: 'X'
 * `--wgd-x2`: Expert option: Treat WGD as a x2 operation. Default: False
+* `--lower-fst-nni`, `-l-nni`: Expert option: also use the lower FST (rather than only the upper FST) while scoring candidates during NNI search itself, not just for the final ancestral reconstruction. Only relevant with `--nni-mode`. Default: False
 
 
 ## Input files
@@ -100,6 +109,14 @@ MEDICC creates the following output files:
 
 * `_copynumber_events_df.tsv`: List of all copy-number events detected. The entries for WGD events have non-meaningful values for chrom, cn_child, etc. Note that the events derived are not unambiguous.
 * `_events_overlap.tsv`: Overlap of copy-number events with regions of interest
+
+*optional (see "Nearest Neighbor Interchange (NNI) search" below)*
+
+* `nni_trace.png`: Written whenever `--nni-mode` is used. Plots the best score found at each NNI search sweep.
+* `nni-trace/nni_trace.tsv`: Written only if `--nni-complete-log` is also set. A complete per-step trace of every topology and score considered during the search.
+
+### Output files with `--nni-export-all-topology`
+When `--nni-export-all-topology` is combined with `--nni-mode`, the output directory structure changes: instead of a single set of `_final_tree.*`/`_branch_lengths.tsv`/`_final_cn_profiles.tsv`/`_summary.tsv`/plot files directly in the output directory, MEDICC2 creates one subfolder per co-optimal topology found, numbered `topology_1/`, `topology_2/`, and so on. Each subfolder contains that topology's own tree, branch lengths, copy-number profiles, plots, summary, and (if `--events` was set) copy-number events and regions-of-interest overlap files, using the same filenames as above with `_topology_N` added (e.g. `_final_tree_topology_2.new`, `_final_cn_profiles_topology_2.tsv`) — except `_summary.tsv`, `_copynumber_events_df.tsv` and `_events_overlap.tsv`, which are written per-topology inside each subfolder without the `_topology_N` suffix. Only `_pairwise_distances.tsv` and `nni_trace.png` are shared across all topologies and stay at the top level of the output directory.
 
 
 ## Output plots
@@ -147,6 +164,17 @@ MEDICCC2 can overlap the inferred events with regions of interest such as chromo
 This process requires the installation of `pyranges` which might be incompatible with newer version of python and/or numpy.
 The overlap is turned off by default. You can turn on the overlapping with the ``--chromosomes-bed` and `--regions-bed` flag by providing bed-files with regions of interest. By default MEDICC2 uses hg38 chromosome-arms and a list of genes taken from Davoli et al. Cell 2013. This data is present as BED files in the `medicc/objects` folder. Invoke these using the flags `--chromosomes-bed "default"` and/or `--regions-bed "default"`.
 Users can specify regions of interest of their own in BED format by providing the `--chromosomes-bed` or `--regions-bed` flags.
+
+
+## Nearest Neighbor Interchange (NNI) search
+By default, MEDICC2 builds its tree topology with neighbor joining and does not search further. Passing `--nni-mode` additionally refines that topology (or a topology supplied via `--tree`) with a Nearest Neighbor Interchange (NNI) local search: each search step tries swapping neighboring branches and keeps whichever resulting topology has the best (lowest) score, repeating until no swap improves the score further.
+
+* `--nni-max-topology` sets a hard cap on the total number of NNI neighbor evaluations across the whole search (a compute budget, not a count of distinct topologies), in case the search has not converged yet.
+* The search can end in a tie between multiple equally good topologies. By default MEDICC2 reports only one of them; `--nni-export-all-topology` exports every co-optimal topology instead, each written to its own `topology_N/` subfolder under the output directory. This cannot be combined with bootstrapping (`--bootstrap-nr`/`--bootstrap-method`), since bootstrapping requires a single reference tree.
+* `--nni-complete-log` writes a full per-sweep trace (topology and score at every step) to `<output_dir>/nni-trace/`.
+* `--lower-fst-nni`/`-l-nni` and `--length-aware-ancestors`/`-la` are expert options controlling which FST is used during NNI search and ancestral reconstruction respectively; see the flag descriptions above.
+
+NNI mode always starts from whichever tree MEDICC2 has already built (via neighbor joining, or a tree supplied with `--tree`) — there is no separate flag to give NNI a different starting tree.
 
 
 ## Single sample WGD detection
@@ -202,7 +230,7 @@ MEDICC2 will assume that the segmentation is gap-less, i.e. that gaps between ne
 
 
 # Bugs, feature requests and contact
-You can report bugs and request features directly in [Bitbucket](https://bitbucket.org/schwarzlab/medicc2/issues) or contact us via at *chenxi.nie@iccb-cologne.org*.
+You can report bugs and request features directly in [Github](https://github.com/schwarzlab-ccb/medicc2/issues) or contact us via at *chenxi.nie@iccb-cologne.org*.
 
 
 # License
