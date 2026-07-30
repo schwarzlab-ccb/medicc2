@@ -11,7 +11,7 @@ Install MEDICC2 via conda (recommended), pip or from source. MEDICC2 was develop
 
 Note that the notebooks and examples are not included when installing from conda or pip.
 
-For all installation methods you need to make sure to have a working version of the GNU Compiler Collection (`gcc`, `gxx` as well as related packages such as `libgcc-ng`) installed. Note that MEDICC2 requires Cython version 0.29 and does *not* work with Cython version 3.0.
+For all installation methods you need to make sure to have a working version of the GNU Compiler Collection (`gcc`, `gxx` as well as related packages such as `libgcc-ng`) installed. Note that MEDICC2 requires Cython version 3.0 or later.
 
 
 ## Installation via conda (recommended)
