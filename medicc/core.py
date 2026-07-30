@@ -35,7 +35,8 @@ def main(input_df,
          nni_mode_flag=False,
          nni_max_iter=20000,
          nni_trace_dir=None,
-         nni_export_all_topology=False, la_nni=False):
+         nni_export_all_topology=False,
+         la_nni=False, shortening_cnp_speed_up=True):
     """ MEDICC Main Method """
 
     symbol_upper_table = asymm_upper_fst.input_symbols()
@@ -60,9 +61,9 @@ def main(input_df,
         logger.info("Calculating pairwise distance matrices.")
         if n_cores is not None and n_cores > 1:
             pairwise_distances = parallelization_calc_pairwise_distance(sample_labels, asymm_upper_fst, CN_str_dict,
-                                                                                    n_cores)
+                                                                                    n_cores, shortening_cnp_speed_up)
         else:
-            pairwise_distances = calc_pairwise_distance_matrix(asymm_upper_fst, CN_str_dict)
+            pairwise_distances = calc_pairwise_distance_matrix(asymm_upper_fst, CN_str_dict, shortening=shortening_cnp_speed_up)
 
         if (pairwise_distances == np.inf).any().any():
             affected_pairs = [(pairwise_distances.index[s1], pairwise_distances.index[s2])
@@ -424,7 +425,7 @@ def shorten_cn_strings(string_1, string_2):
     return string_1_short, string_2_short
 
 
-def parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict, n_cores):
+def parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict, n_cores, shortening=True):
     try:
         from joblib import Parallel, delayed
     except ImportError:
@@ -435,7 +436,7 @@ def parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict
     logger.info("Running {} parallel runs on {} cores.".format(len(parallelization_groups), n_cores))
 
     parallel_pairwise_distances = Parallel(n_jobs=n_cores)(delayed(calc_pairwise_distance_matrix)(
-        asymm_fst, {key: val for key, val in CN_str_dict.items() if key in cur_group}, True)
+        asymm_fst, {key: val for key, val in CN_str_dict.items() if key in cur_group}, True, shortening)
             for cur_group in parallelization_groups)
 
     pdm = medicc.tools.total_pdm_from_parallel_pdms(sample_labels, parallel_pairwise_distances)
@@ -444,12 +445,15 @@ def parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict
 
 
 @lru_cache(maxsize=None)
-def calc_MED_distance(model_fst, profile_1, profile_2):
+def calc_MED_distance(model_fst, profile_1, profile_2, shortening=True):
     '''
     Calculate the MED distance between two profiles represented as strings.
     '''
 
-    profile_1_short, profile_2_short = shorten_cn_strings(profile_1, profile_2)
+    if shortening:
+        profile_1_short, profile_2_short = shorten_cn_strings(profile_1, profile_2)
+    else:
+        profile_1_short, profile_2_short = profile_1, profile_2
 
     # Convert shrunken string to fsa
     symbol_table = model_fst.input_symbols()
@@ -462,14 +466,14 @@ def calc_MED_distance(model_fst, profile_1, profile_2):
     return distance
 
 
-def calc_pairwise_distance_matrix(model_fst, cn_str_dict, parallel_run=True):
+def calc_pairwise_distance_matrix(model_fst, cn_str_dict, parallel_run=True, shortening=True):
     samples = list(cn_str_dict.keys())
     pdm = pd.DataFrame(0, index=samples, columns=samples, dtype=float)
     combs = list(combinations(samples, 2))
     ncombs = len(combs)
 
     for i, (sample_a, sample_b) in enumerate(combs):
-        cur_dist = calc_MED_distance(model_fst, cn_str_dict[sample_a], cn_str_dict[sample_b])
+        cur_dist = calc_MED_distance(model_fst, cn_str_dict[sample_a], cn_str_dict[sample_b], shortening=shortening)
         pdm.loc[sample_a, sample_b] = cur_dist
         pdm.loc[sample_b, sample_a] = cur_dist
 

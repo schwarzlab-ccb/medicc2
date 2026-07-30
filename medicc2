@@ -227,6 +227,7 @@ if args.fst is not None:
                                         wgd_x2=args.wgd_x2,
                                         length_encoding=False)
     lower_pass_fst = upper_pass_fst
+    shortening_cnp_speed_up=False
 elif has_custom_pair:
     upper_fst_path = args.upper_fst
     lower_fst_path = args.lower_fst
@@ -240,6 +241,7 @@ elif has_custom_pair:
                                         total_copy_numbers=args.total_copy_numbers,
                                         wgd_x2=args.wgd_x2,
                                         length_encoding=True)
+    shortening_cnp_speed_up=False
 elif args.length_aware_ancestors:
     upper_fst_path = None
     lower_fst_path = None
@@ -253,6 +255,7 @@ elif args.length_aware_ancestors:
                                         total_copy_numbers=args.total_copy_numbers,
                                         wgd_x2=args.wgd_x2,
                                         length_encoding=True)
+    shortening_cnp_speed_up=True
 else:
     upper_fst_path = None
     lower_fst_path = None
@@ -262,6 +265,7 @@ else:
                                         wgd_x2=args.wgd_x2,
                                         length_encoding=False)
     lower_pass_fst = upper_pass_fst
+    shortening_cnp_speed_up=True
 
 
 if args.user_tree is not None:
@@ -315,7 +319,7 @@ if not args.nni_mode:
         total_cn=args.total_copy_numbers,
         n_cores=args.n_cores,
         reconstruct_events=args.events,
-        nni_mode_flag=False, la_nni=args.l_nni)
+        nni_mode_flag=False, la_nni=args.l_nni, shortening_cnp_speed_up=shortening_cnp_speed_up)
 else:
     if not args.nni_export_all_topology:
         sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df, nni_trace, nni_step_records = medicc.main(
@@ -336,7 +340,7 @@ else:
             nni_mode_flag=True,
             nni_max_iter=args.nni_max_iter,
             nni_trace_dir=nni_trace_dir,
-            nni_export_all_topology=False, la_nni=args.l_nni)
+            nni_export_all_topology=False, la_nni=args.l_nni, shortening_cnp_speed_up=shortening_cnp_speed_up)
     else:
         sample_labels, pairwise_distances, nj_tree, final_tree_l, output_df_l, events_df_l, nni_trace, nni_step_records = medicc.main(
             input_df=input_df,
@@ -356,7 +360,7 @@ else:
             nni_mode_flag=True,
             nni_max_iter=args.nni_max_iter,
             nni_trace_dir=nni_trace_dir,
-            nni_export_all_topology=True, la_nni=args.l_nni)
+            nni_export_all_topology=True, la_nni=args.l_nni, shortening_cnp_speed_up=shortening_cnp_speed_up)
 
         # Handle all topology file io
         # Write results
