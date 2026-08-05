@@ -274,7 +274,7 @@ def intersect_clades_detmin(left, right, fst, prune_weight=None, detmin_before_i
     intersection = fstlib.intersect(L.arcsort('olabel'), R)
     # For prune_weight=0, deletes all paths but the shortest one
     if prune_weight is not None:
-        pruned = fstlib.prune(intersection, weight=prune_weight)
+        pruned = medicc.fst_utils.prune_acyclic(intersection, weight=prune_weight)
     else:
         pruned = intersection
     if detmin_after_intersect:

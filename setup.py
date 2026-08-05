@@ -66,6 +66,16 @@ setup(
                   libraries=["fst", "fstfar", "fstscript", "fstfarscript"],
                   extra_compile_args=extra_compile_args,
                   extra_link_args=extra_link_args,
-                  language = "c++")
+                  language = "c++"),
+        Extension(
+            "medicc.acyclic_prune",
+            ["medicc/cext/acyclic_prune.pyx"],
+            include_dirs=["medicc/cext", "fstlib/cext"],
+            depends=["medicc/cext/acyclic_prune.h"],
+            libraries=["fst", "fstfar", "fstscript", "fstfarscript"],
+            extra_compile_args=extra_compile_args,
+            extra_link_args=extra_link_args,
+            language="c++",
+        )
     ])
 )
