@@ -1,7 +1,33 @@
 from __future__ import annotations
 
 import fstlib
-from .acyclic_prune import prune_acyclic as _prune_acyclic_native
+from .acyclic_prune import (
+    intersect_prune_acyclic as _intersect_prune_acyclic_native,
+    prune_acyclic as _prune_acyclic_native,
+)
+
+def intersect_prune_acyclic(
+        left: fstlib.Fst,
+        right: fstlib.Fst,
+        weight: float = 0.0,
+        delta: float | None = None,
+) -> fstlib.Fst:
+    """Intersect two sorted MEDICC acceptors and materialize only pruned paths.
+
+    This experimental fused operation is intentionally narrower than
+    ``fstlib.intersect``. Both operands must be standard-arc, epsilon-free,
+    input-label-sorted, acyclic, topologically sorted acceptors.
+    """
+    if not isinstance(left, fstlib.Fst) or not isinstance(right, fstlib.Fst):
+        raise TypeError("left and right must be fstlib FSTs")
+    if left.arc_type() != "standard" or right.arc_type() != "standard":
+        raise ValueError("fused acyclic intersection only supports tropical semiring")
+    if delta is None:
+        delta = fstlib.DELTA
+
+    native_result = _intersect_prune_acyclic_native(
+        left.fst, right.fst, float(weight), float(delta))
+    return fstlib.Fst(native_result)
 
 def prune_acyclic(
         ifst: fstlib.Fst,
@@ -58,3 +84,6 @@ def prune_acyclic(
     native_result = _prune_acyclic_native(ifst.fst, float(weight), float(delta))
 
     return fstlib.Fst(native_result)
+
+
+

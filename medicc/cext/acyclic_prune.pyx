@@ -13,6 +13,12 @@ cdef extern from "acyclic_prune.h" namespace "medicc_fstlib_extension" nogil:
         float weight_threshold,
         float delta,
     ) except +
+    fst.MutableFstClass* intersect_prune_acyclic_std(
+        const fst.FstClass& left,
+        const fst.FstClass& right,
+        float weight_threshold,
+        float delta,
+    ) except +
 
 cpdef MutableFst prune_acyclic(
         Fst ifst,
@@ -24,7 +30,7 @@ cpdef MutableFst prune_acyclic(
     cdef fst.MutableFstClass* output = NULL
 
     if input_ptr == NULL:
-        raise RuntimeError("fstlib Fst contained no native FstClass pointer")
+        raise RuntimeError("fstlib Fst contained no native FstClass pointer.")
 
     with nogil:
         output = prune_acyclic_std(deref(input_ptr), weight, delta)
@@ -34,6 +40,29 @@ cpdef MutableFst prune_acyclic(
 
     return _init_MutableFst(output)
 
+cpdef MutableFst intersect_prune_acyclic(
+        Fst left,
+        Fst right,
+        float weight=0.0,
+        float delta=0.0009765625,
+):
+    """Native fused intersection and exact acyclic pruning."""
+    cdef shared_ptr[fst.FstClass] left_owner = left._fst
+    cdef shared_ptr[fst.FstClass] right_owner = right._fst
+    cdef const fst.FstClass* left_ptr = left_owner.get()
+    cdef const fst.FstClass* right_ptr = right_owner.get()
+    cdef fst.MutableFstClass* output = NULL
 
+    if left_ptr == NULL or right_ptr == NULL:
+        raise RuntimeError("fstlib operand contained no native FstClass pointer.")
+
+    with nogil:
+        output = intersect_prune_acyclic_std(
+            deref(left_ptr), deref(right_ptr), weight, delta)
+
+    if output == NULL:
+        raise RuntimeError("native fused intersection returned no output FST.")
+
+    return _init_MutableFst(output)
 
 

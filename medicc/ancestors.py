@@ -271,12 +271,14 @@ def intersect_clades_detmin(left, right, fst, prune_weight=None, detmin_before_i
     if detmin_before_intersect:
         L = fstlib.determinize(L).minimize()
         R = fstlib.determinize(R).minimize()
-    intersection = fstlib.intersect(L.arcsort('olabel'), R)
-    # For prune_weight=0, deletes all paths but the shortest one
     if prune_weight is not None:
-        pruned = medicc.fst_utils.prune_acyclic(intersection, weight=prune_weight)
+        # The MEDICC upper-pass operands are epsilon-free, acyclic acceptors.
+        # Sorting both sides lets the native fused operation traverse their
+        # lazy product without ever materializing its enormous raw arc set.
+        pruned = medicc.fst_utils.intersect_prune_acyclic(
+            L.arcsort('ilabel'), R.arcsort('ilabel'), weight=prune_weight)
     else:
-        pruned = intersection
+        pruned = fstlib.intersect(L.arcsort('olabel'), R)
     if detmin_after_intersect:
         pruned = fstlib.determinize(pruned).minimize()
     return pruned
