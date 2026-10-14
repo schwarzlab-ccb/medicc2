@@ -1,0 +1,6 @@
+include LICENSE FSTLIB_LICENSE README.md environment-linux-64.explicit.txt
+recursive-include medicc *.py *.yaml *.pyx *.h *.cpp *.hpp *.txt
+recursive-include fstlib *.py *.yaml *.pyx *.pxd *.h
+recursive-include scripts *.py
+recursive-include tests *.py
+recursive-include doc *.rst

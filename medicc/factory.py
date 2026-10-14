@@ -63,7 +63,12 @@ def create_1step_del_fst(symbol_table, separator='X', exclude_zero=False, w_stay
     return myfst
 
 
-def create_loh_fst(symbol_table, separator='X', scale=1):
+def create_loh_fst(symbol_table, separator='X', scale=1, det_min=True):
+    """Create an LOH FST for event counting or length encoding.
+
+    ``scale=1`` preserves the event-counting behavior. Any other value is used
+    as the event-opening cost, with an extension cost of 1 per concurrent loss.
+    """
 
     cns = _get_int_cns_from_symbol_table(symbol_table, separator)
 
@@ -84,17 +89,26 @@ def create_loh_fst(symbol_table, separator='X', scale=1):
     ## others
     for state in range(1, 9):
         cost = state
-        myfst.add_arcs(0, [(s, t, cost * scale, state) for s in cns.keys()
+        myfst.add_arcs(0, [(s, t, cost*scale, state) for s in cns.keys()
                            for t in cns.keys() if (cns[s]-cns[t]) == cost and t == '0'])
-        myfst.add_arcs(state, [(s, t, 0, state) for s in cns.keys()
-                               for t in cns.keys() if (cns[s]-cns[t]) <= cost and t == '0'])
-        myfst.add_arcs(state, [(s, t, (cns[s]-cns[t]-cost) * scale, cns[s]-cns[t]) for s in cns.keys()
+        # TODO: Make this distinction clearer, possibly by separating the two
+        # paths into dedicated functions.
+        if scale != 1:
+            # Length-encoding path
+            myfst.add_arcs(state, [(s, t, cost, state) for s in cns.keys()
+                                   for t in cns.keys() if (cns[s]-cns[t]) <= cost and t == '0'])
+        else:
+            # Default event-counting path
+            myfst.add_arcs(state, [(s, t, 0, state) for s in cns.keys()
+                                   for t in cns.keys() if (cns[s]-cns[t]) <= cost and t == '0'])
+        myfst.add_arcs(state, [(s, t, (cns[s]-cns[t]-cost)*scale, cns[s]-cns[t]) for s in cns.keys()
                                for t in cns.keys() if (cns[s]-cns[t]) > cost and t == '0'])
         myfst.add_arcs(state, [(s, s, 0, 0) for s in cns.keys()])
         if separator is not None and separator != '':
             myfst.add_arc(state, (separator, separator, 0, 0))
 
-    myfst = fstlib.encode_determinize_minimize(myfst)
+    if det_min:
+        myfst = fstlib.encode_determinize_minimize(myfst)
     
     return myfst
 
@@ -148,130 +162,8 @@ def create_1step_WGD_fst(symbol_table, separator='X', wgd_cost=1, minimize=True,
 
     return W
 
-
-def create_nstep_fst(n, one_step_fst, minimize=True):
-    # Extend 1step FST
-    nstep_fst = one_step_fst
-    nstep_fst.arcsort(sort_type='olabel')
-
-    for _ in range(n):
-        nstep_fst = fstlib.compose(nstep_fst, one_step_fst)
-        if minimize:
-            nstep_fst = fstlib.encode_determinize_minimize(nstep_fst)
-        nstep_fst.arcsort(sort_type='olabel')
-
-    return nstep_fst
-
-
-def create_copynumber_fst(symbol_table, sep='X', enable_wgd=False, wgd_cost=1, 
-                          max_num_wgds=3, wgd_x2=False, output_all=False, total_cn=False,
-                          exact_nowgd=True, max_pre_wgd_losses=8, exact_wgd=False):
-    """ Creates the tree FST T which computes the asymmetric MED.
-    The current creation is based on a trade-off. In the absence of WGDs (and the default "exact_nowgd=True"),
-    the FST is exact wr.t. combined LOH-losses (i.e 21 -> 10 is counted as one event), however,
-    in the presence of WGDs, for performance reasons losses and LOHs are counted separately.
-
-    For `exact_wgd=True`, the FST is exact w.r.t. combined LOH-losses even in the presence of WGDs 
-    but due to the exponential growth of the FST, it is not feasible in most cases. (Example where 
-    this is required: 22X1X1X1 -> 10X2X2X2, 4 events with exact_wgd and 5 otherwise.)
-
-    For `exact_nowgd=False` the legacy version is created which never combines losses and LOHs.
-    """
-    n = len(_get_int_cns_from_symbol_table(symbol_table, sep))
-
-    L_1step = create_1step_del_fst(symbol_table, sep, exclude_zero=True)
-    L = create_nstep_fst(n-1, L_1step)
-    LG = fstlib.encode_determinize_minimize(L*~L)
-    G = ~L
-    L_LOH_1step = create_1step_del_fst(symbol_table, sep, exclude_zero=False)
-    L_LOH = create_nstep_fst(max_pre_wgd_losses-1, L_LOH_1step)
-    LOH = create_loh_fst(symbol_table, sep)
-    
-    if enable_wgd:
-        W1step = create_1step_WGD_fst(symbol_table, sep, wgd_cost=wgd_cost,
-                                      minimize=False, wgd_x2=wgd_x2, total_cn=total_cn)
-        n = int(min(max_num_wgds, np.floor(np.log2(n))))
-        if n > 1:
-            W = create_nstep_fst(n-1, W1step)
-        else:
-            W = W1step
-        if exact_wgd:
-            T = L_LOH * W * LG
-        elif exact_nowgd:
-            T = ((LOH * W * LG) + fstlib.encode_determinize_minimize(L_LOH * G)).rmepsilon()
-        else:
-            # legacy version
-            T = LOH * W * LG
-    else:
-        if exact_nowgd:
-            T = fstlib.encode_determinize_minimize(L_LOH*G)
-        else:
-            # legacy version
-            T = LOH * LG
-        W = None
-
-    if output_all:
-        return {'T': T, 'LOH': LOH, 'W': W, 'L': L, 'L_LOH': L_LOH, 'G': G, 'LG': LG}
-    else:
-        return T
-
-
-def modify_gain_loss_fst_with_weights(medicc2_fst, w_stay, w_open, w_extend, w_close, chr_sep="X"):
-    """
-    Modifies an input gain/loss FST by applying different weights to staying, event opening, event extending and event closing. 
-    The input FST must be a gain/loss FST created by medicc2's create_nstep_fst function.
-    This function is a tradeoff, ideally you would want to modify the weights in 1step gain/loss FST and then create the nstep FST using create_nstep_fst.
-    However, this is not feasible cause for certain combination of event open weigth and event extend weight, the nstep FST would not encode-determinize-minimize. 
-    Instead, we opted for taking the FST structure of existing MEDICC2 gain/loss FSTs and just modify their weights. 
-    """
-
-    medicc2_fst_copy = medicc2_fst.copy()
-    symbol_table = medicc2_fst.input_symbols()
-
-    for state in medicc2_fst_copy.states():
-        mutable_arc_iterator = medicc2_fst_copy.mutable_arcs(state)
-        while not mutable_arc_iterator.done():
-            arc = mutable_arc_iterator.value()
-            state_from = int(state)
-            state_to = int(arc.nextstate)
-            ilabel = arc.ilabel
-            olabel = arc.olabel 
-            weight = float(arc.weight)
-
-            if state_from == state_to:
-                if state_from != 0:
-                    # Event extending 
-                    if ilabel != symbol_table.find("0") and ilabel != symbol_table.find(chr_sep):
-                        new_weight = state_from * w_extend
-                        new_weight = fstlib.cext.pywrapfst.Weight(medicc2_fst_copy.weight_type(), new_weight)
-                        arc.weight = new_weight
-                        mutable_arc_iterator.set_value(arc)
-                else:
-                    # Staying in state 0
-                    if ilabel != symbol_table.find("0") and ilabel != symbol_table.find(chr_sep):
-                        new_weight = state_from * w_stay
-                        new_weight = fstlib.cext.pywrapfst.Weight(medicc2_fst_copy.weight_type(), new_weight)
-                        arc.weight = new_weight
-                        mutable_arc_iterator.set_value(arc)
-            elif state_to > state_from:
-                # Event opening
-                if ilabel != symbol_table.find(chr_sep): # copy number 0 cannot gain or loss 
-                    new_weight = (state_to - state_from) * w_open 
-                    new_weight = fstlib.cext.pywrapfst.Weight(medicc2_fst_copy.weight_type(), new_weight)
-                    arc.weight = new_weight
-                    mutable_arc_iterator.set_value(arc)
-            else:
-                # Event closing 
-                if ilabel != symbol_table.find(chr_sep):
-                    new_weight = w_close
-                    new_weight = fstlib.cext.pywrapfst.Weight(medicc2_fst_copy.weight_type(), new_weight)
-                    arc.weight = new_weight 
-                    mutable_arc_iterator.set_value(arc)
-            mutable_arc_iterator.next()
-    return medicc2_fst_copy
-
-
 def create_1step_gain_fst_whole_chrom(symbol_table, separator='X', w_open=1, minimize=True):
+
 
     cns = _get_int_cns_from_symbol_table(symbol_table, separator)
 
@@ -344,3 +236,134 @@ def create_1step_loss_fst_whole_chrom(symbol_table, separator='X', w_open=1, min
         W = fstlib.encode_determinize_minimize(W)
 
     return W
+
+
+
+def create_nstep_fst(n, one_step_fst, minimize=True):
+    # Extend 1step FST
+    nstep_fst = one_step_fst
+    nstep_fst.arcsort(sort_type='olabel')
+
+    for _ in range(n):
+        nstep_fst = fstlib.compose(nstep_fst, one_step_fst)
+        if minimize:
+            nstep_fst = fstlib.encode_determinize_minimize(nstep_fst)
+        nstep_fst.arcsort(sort_type='olabel')
+
+    return nstep_fst
+
+
+def create_copynumber_fst(symbol_table, sep='X', enable_wgd=False, wgd_cost=1,
+                          max_num_wgds=3, wgd_x2=False, output_all=False, total_cn=False,
+                          exact_nowgd=True, max_pre_wgd_losses=8, exact_wgd=False, length_encoding=False, length_encoding_open_weight=5000):
+    """Create the tree FST T, which computes the asymmetric MED.
+
+    This construction is based on a trade-off. In the absence of WGDs (and with
+    the default ``exact_nowgd=True``), the FST is exact with respect to combined
+    LOH-loss events (for example, 21 -> 10 is counted as one event). In the
+    presence of WGDs, losses and LOH events are counted separately for
+    performance reasons. When ``length_encoding`` is set, the length-encoding
+    version of the FST is created.
+
+    With ``exact_wgd=True``, the FST is exact with respect to combined LOH-loss
+    events even in the presence of WGDs. Because the FST grows exponentially,
+    however, this is infeasible in most cases. One case where it is required is
+    22X1X1X1 -> 10X2X2X2, which has 4 events with ``exact_wgd`` and 5 otherwise.
+    Combining ``exact_wgd=True`` with ``length_encoding=True`` is not supported
+    because of the resulting FST size.
+
+    With ``exact_nowgd=False``, the legacy version is created, which never
+    combines losses and LOH events.
+
+    Intentional design choices for the length-encoding branch:
+        - To minimize code changes, the branch currently constructs all
+          event-counting FSTs before replacing them with their length-encoding
+          counterparts.
+        - To keep the FST size manageable, the branch permits at most one WGD.
+          Therefore, ``max_num_wgds`` and ``wgd_cost`` are ignored.
+        - The length-encoding opening weight must be sufficiently larger than
+          the maximum bin count to prevent inconsistencies with the
+          event-counting result.
+    """
+    n = len(_get_int_cns_from_symbol_table(symbol_table, sep))
+
+    L_1step = create_1step_del_fst(symbol_table, sep, exclude_zero=True)
+    L = create_nstep_fst(n-1, L_1step)
+    LG = fstlib.encode_determinize_minimize(L*~L)
+    G = ~L
+    L_LOH_1step = create_1step_del_fst(symbol_table, sep, exclude_zero=False)
+    L_LOH = create_nstep_fst(max_pre_wgd_losses-1, L_LOH_1step)
+    LOH = create_loh_fst(symbol_table, sep)
+
+    if length_encoding:
+        G1step_chrom = create_1step_gain_fst_whole_chrom(symbol_table, sep, w_open=length_encoding_open_weight, minimize=True)
+        G1step = ~create_1step_del_fst(symbol_table, separator=sep, exclude_zero=True, w_stay=0,
+                                       w_open=length_encoding_open_weight, w_extend=1)
+        L_LOH_1step_chrom = create_1step_loss_fst_whole_chrom(symbol_table, sep, w_open=length_encoding_open_weight, minimize=False)
+        L_LOH_1step = create_1step_del_fst(symbol_table, separator=sep, exclude_zero=False, w_stay=0,
+                                           w_open=length_encoding_open_weight, w_extend=1)
+        G_chrom = create_nstep_fst(n-1, G1step_chrom)
+        G = create_nstep_fst(n-1, G1step)
+        L_LOH_chrom = create_nstep_fst(max_pre_wgd_losses-1, L_LOH_1step_chrom)
+        L_LOH = create_nstep_fst(max_pre_wgd_losses-1, L_LOH_1step)
+        L_chrom = ~G_chrom
+        L = ~G
+        LOH = create_loh_fst(symbol_table, sep, scale=length_encoding_open_weight, det_min=False)
+        LOH.connect()  # Remove unreachable states.
+        LG_chrom = fstlib.encode_determinize_minimize(L_chrom * G_chrom)
+        LG = L * G
+        XX = L_LOH *G
+
+    if enable_wgd:
+        W1step = create_1step_WGD_fst(symbol_table, sep, wgd_cost=wgd_cost,
+                                      minimize=False, wgd_x2=wgd_x2, total_cn=total_cn)
+        n = int(min(max_num_wgds, np.floor(np.log2(n))))
+        if n > 1:
+            W = create_nstep_fst(n-1, W1step)
+        else:
+            W = W1step
+        if length_encoding:
+            W1step = create_1step_WGD_fst(symbol_table, sep, wgd_cost=length_encoding_open_weight,
+                                          minimize=False, wgd_x2=wgd_x2, total_cn=total_cn)
+            W = W1step
+        if exact_wgd:
+            if not length_encoding:
+                T = L_LOH * W * LG
+            else:
+                raise ValueError("Exact length-encoding FSTs are too large to be practical; "
+                                 "use either exact_wgd or length_encoding, not both.")
+        elif exact_nowgd:
+            if not length_encoding:
+                T = ((LOH * W * LG) + fstlib.encode_determinize_minimize(L_LOH * G)).rmepsilon() # This is the current MEDICC default
+            else:
+                wgd_path = LOH * W * LG_chrom * LG
+                l_loh_path = LOH * L_LOH_chrom * G_chrom * XX
+                T = (wgd_path + l_loh_path).rmepsilon()
+        else:
+            if not length_encoding:
+                # legacy version
+                T = LOH * W * LG
+            else:
+                raise ValueError("Legacy FSTs do not support length_encoding.")
+
+    else:
+        if exact_nowgd:
+            if not length_encoding:
+                T = fstlib.encode_determinize_minimize(L_LOH*G)
+            else:
+                T = LOH * L_LOH_chrom * G_chrom * XX
+        else:
+            # legacy version
+            if not length_encoding:
+                T = LOH * LG
+            else:
+                raise ValueError("Legacy FSTs do not support length_encoding.")
+        W = None
+
+    if output_all:
+        if not length_encoding:
+            return {'T': T, 'LOH': LOH, 'W': W, 'L': L, 'L_LOH': L_LOH, 'G': G, 'LG': LG}
+        else:
+            return {'T': T, 'LOH': LOH, 'W': W, 'L': L, 'L_LOH': L_LOH, 'G': G, 'LG': LG, 'L_chrom': L_chrom, 'L_LOH_chrom': L_LOH_chrom, 'G_chrom': G_chrom}
+    else:
+        return T

@@ -1,0 +1,22 @@
+version: 1
+
+formatters:
+    simple:
+        format: "%(levelname)s %(name)s:\t%(message)s"
+
+    simple_w_time:
+        format: "%(asctime)s - %(levelname)s %(name)s:\t%(message)s"
+
+
+handlers:
+    console:
+        class: logging.StreamHandler
+        formatter: simple_w_time
+    # TODO: Write to file
+
+
+loggers:
+    fstlib:
+        level: WARNING
+        handlers: [console]
+        propagate: yes

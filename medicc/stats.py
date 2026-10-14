@@ -71,5 +71,5 @@ def molecular_clock_test(D, normal_index=0):
     return 1-prob ## the p-value
 
 
-def MEDICCStatsError(Exception):
+class MEDICCStatsError(Exception):
     pass

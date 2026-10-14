@@ -1,2 +1,3 @@
 [build-system]
-requires = ["cython >= 3.0", "setuptools", "wheel", "pathlib"]
+requires = ["setuptools", "wheel", "Cython>=3"]
+build-backend = "setuptools.build_meta"

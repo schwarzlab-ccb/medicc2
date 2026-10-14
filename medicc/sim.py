@@ -61,7 +61,7 @@ def _mutate(cnstr, event, start, end, maxcn, mincn, ignore_chr_boundaries=False,
             if newcn < mincn:
                 newcn = mincn
         else:
-            logger.error('unknown event')
+            logger.error(f'unknown event type: {event}. Expected one of gain or loss.')
             newcn = oldcn
         cnstr[i] = tools.int2hex(newcn)
 
@@ -161,7 +161,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
         reordered = pd.concat([reordered, edge.iloc[[root]]])
         edge.drop(edge.index[root], inplace = True)
         while  not edge.empty:
-            if (set (edge.a.isin([parent[-1]]))) == {False}:#checks if both occurences took place, and value can be popped out of stack
+            if (set (edge.a.isin([parent[-1]]))) == {False}:#checks if both occurrences took place, and value can be popped out of stack
                 del parent[-1]
             if child <= n :
                 root = edge.a.isin([parent[-1]]).idxmax()
@@ -204,7 +204,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
 
 
 def _edgelist_to_tree(el, add_normal=True, normal_name='diploid'):
-    clades = {name:Bio.Phylo.PhyloXML.Clade(name=name) for name in el[['name_a','name_b']].stack().unique()} 
+    clades = {name:Bio.Phylo.PhyloXML.Clade(name=name) for name in el[['name_a','name_b']].stack(future_stack=True).unique()}
     if add_normal:
         clades[normal_name] = Bio.Phylo.PhyloXML.Clade(name=normal_name, branch_length=1)
         clades['mrca'].clades.append(clades[normal_name])

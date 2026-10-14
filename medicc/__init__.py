@@ -11,14 +11,13 @@ import medicc.plot
 import medicc.sim
 import medicc.stats
 import medicc.tools
-import medicc.spr
-import medicc.nni
 import medicc.tree_hash
-from medicc.ancestors import reconstruct_ancestors, reconstruct_ancestors_incremental, reconstruct_ancestors_constrained_sankoff
+import medicc.nni
+import medicc.fst_utils
+from medicc.ancestors import reconstruct_ancestors
 from medicc.core import *
 from medicc.factory import *
 from medicc._version import __version__
-
 
 with open(os.path.join(os.path.dirname(__file__), 'logging_conf.yaml'), 'rt') as f:
     config = yaml.safe_load(f.read())

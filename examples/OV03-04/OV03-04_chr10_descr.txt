@@ -1,1 +1,0 @@
-chr_10 OV03-04_chr10_major.fasta OV03-04_chr10_minor.fasta
