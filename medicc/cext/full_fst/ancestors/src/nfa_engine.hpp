@@ -286,7 +286,7 @@ public:
 struct Stats {
     double *v;
     size_t expanded = 0, states = 0, generated = 0, tight = 0, det = 0;
-    size_t relaxation_skips = 0;
+    size_t relaxation_skips = 0, segment_restarts = 0, segments = 0;
     double forward_seconds = 0, backward_seconds = 0, output_seconds = 0;
     ~Stats() {
         v[0] += expanded;
@@ -308,11 +308,34 @@ static DFA determinize(const vector<Tight> &n, int start, int len, int offset, S
     auto layers=levels(d);
     return minimize(move(d),layers);
 }
+// A large search can restart at independent chromosome boundaries. The private
+// exception releases its explored graph before constructing the smaller searches.
+#ifndef MEDICC_ANCESTOR_SEGMENT_TRIGGER
+#define MEDICC_ANCESTOR_SEGMENT_TRIGGER 250000
+#endif
+struct SegmentRestart { vector<int> cuts; };
+static vector<int> segment_cuts(const Side &a, const Side &b, const vector<int> &mask) {
+    for (auto *side : {&a, &b})
+        for (auto *part : side->parts) {
+            if (part->fin[part->start] != 0) return {};
+            for (const auto &row : part->arcs)
+                for (const auto &arc : row[9])
+                    if (arc.out != 9 || arc.to != part->start) return {};
+        }
+    auto left = levels(*a.child), right = levels(*b.child);
+    vector<int> cuts{0};
+    for (int level = 1; level < a.child->len; ++level)
+        if (mask[level - 1] == 512 && left[level].size() == 1 && right[level].size() == 1)
+            cuts.push_back(level);
+    if (cuts.size() == 1) return {};
+    cuts.push_back(a.child->len);
+    return cuts;
+}
 // Joint state = left Side state plus right Side state. Both consume the same
 // ancestor symbol. upper is a cost of a FEASIBLE complete witness, not a beam.
 // Only f > cap can be discarded here: equality may encode another optimal word.
 static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limit, Stats &stats, const vector<int> &future,
-                  std::atomic<int> *incumbent = nullptr, const sibling_pattern::Bound *pattern = nullptr) {
+                  std::atomic<int> *incumbent = nullptr, const sibling_pattern::Bound *pattern = nullptr, bool allow_segments = false) {
     DFA empty;
     empty.len = a.child->len;
     int offset = a.child->offset + b.child->offset + a.wg + b.wg;
@@ -379,6 +402,13 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
         if (incumbent) cap = min(cap, incumbent->load(std::memory_order_relaxed) - offset);
         if (g + heuristic[s] > cap) throw library_search::Stop{};
         stats.expanded++;
+        if (allow_segments && stats.expanded == MEDICC_ANCESTOR_SEGMENT_TRIGGER) {
+            auto cuts = segment_cuts(a, b, mask);
+            if (!cuts.empty()) {
+                stats.forward_seconds += elapsed(forward_start);
+                throw SegmentRestart{move(cuts)};
+            }
+        }
         nodes[s].expanded = true;
         StateKey key = nodes[s].key;
         int lev = nodes[s].level;
@@ -415,8 +445,9 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
         return empty;
     vector<vector<int>> layers(empty.len + 1);
     for (int s = 0; s < int(nodes.size()); s++)
-        if (nodes[s].expanded && nodes[s].g + a.h(nodes[s].key.a)
-                + b.h(nodes[s].key.b) <= cap)
+        // Reuse every admissible forward bound after the final cap tightens.
+        // Equality remains eligible, preserving all optimal ancestor words.
+        if (nodes[s].expanded && nodes[s].g + heuristic[s] <= cap)
             layers[nodes[s].level].push_back(s);
     for (int lev = empty.len; lev >= 0; lev--)
         for (int s : layers[lev]) {
@@ -476,6 +507,8 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
     stats.output_seconds += elapsed(output_start);
     return result;
 }
+#include "segmented_join.hpp"
+
 // unique_ptr<Side> owns one heap-allocated Side. make_unique constructs it;
 // the Side is deleted automatically when its unique_ptr leaves the vector/scope.
 // Its borrowed Part/DFA pointers are still NOT owned and are not deleted.
@@ -581,7 +614,7 @@ extern "C" void *am_nfa_join(void *h, void *l, void *r, int upper, int kind, int
                 unique_ptr<sibling_pattern::Bound> pattern;
                 if(item[1]<=1 && item[2]<=1)
                     pattern=make_unique<sibling_pattern::Bound>(m->ad,m->a,lm,rm,item[1],item[2]);
-                auto d = search(x, y, mask, bound, limit, stats, future, &best, pattern.get());
+                auto d = adaptive_search(m, x, y, mask, bound, limit, stats, future, &best, pattern.get());
                 std::ostringstream trace;
                 trace << "{\"left_wgd\":" << item[1] << ",\"right_wgd\":" << item[2]
                       << ",\"seconds\":" << elapsed(branch_start)
@@ -592,6 +625,8 @@ extern "C" void *am_nfa_join(void *h, void *l, void *r, int upper, int kind, int
                       << ",\"expansions\":" << stats.expanded << ",\"states\":" << stats.states
                       << ",\"generated\":" << stats.generated
                       << ",\"relaxation_skips\":" << stats.relaxation_skips
+                      << ",\"segment_restarts\":" << stats.segment_restarts
+                      << ",\"segments\":" << stats.segments
                       << ",\"forward\":" << stats.forward_seconds
                       << ",\"backward\":" << stats.backward_seconds
                       << ",\"output\":" << stats.output_seconds << "}";

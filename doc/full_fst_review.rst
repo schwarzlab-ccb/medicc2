@@ -211,3 +211,7 @@ C ABI and compiler options are unchanged.
 For validation commands, see README.md. Reproduction drivers, raw timings and
 comparison reports belong in experiment 20/review_refactor and the external
 medicc_readability_review_20261014 results folder. No datasets are bundled here.
+
+The capped ancestor outlier fallback is described in
+``ancestral_outlier_optimization.rst``. It preserves the full prune-zero language
+and reuses exact chromosome splitting only after a large search begins.

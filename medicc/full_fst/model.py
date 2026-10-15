@@ -25,17 +25,25 @@ class Model:
         self.execution_budget = None
         self.handle = None
         self.scorer = None
+        self.bound_scorer = None
         self.lib = load_ancestor_library()
         self.handle = self.lib.am_load(str(BUILD / "ancestral_parts.txt").encode())
         if not self.handle:
             raise RuntimeError(self.lib.am_error().decode())
         self.scorer = PairScorer(bounds="local", max_wgds=2)
+        # Bounds need only an exact scalar score. Use the optimized implementation
+        # even when a workflow selects the independent reference for final scores.
+        self.bound_scorer = (self.scorer if self.scorer.backend == "direct_pair"
+                             else PairScorer(bounds="local", max_wgds=2, backend="direct_pair"))
         # Python owns these fixed arrays. C++ borrows their addresses during calls.
         self.counters = (C.c_double * 5)()
         self.down_counters = (C.c_double * 3)()
 
     def close(self):
         """Idempotent: release each native allocation once, even after an error."""
+        if self.bound_scorer is not None and self.bound_scorer is not self.scorer:
+            self.bound_scorer.close()
+        self.bound_scorer = None
         if self.scorer is not None:
             self.scorer.close()
         if self.handle:
@@ -86,7 +94,7 @@ class Model:
         y, wy = right.choose()
         # The chosen child profiles are feasible. Their exact kernel score plus
         # stored subtree costs is an upper bound, never an empirical cutoff.
-        upper = self.scorer.score(*self.shorten(x, y)) + wx + wy
+        upper = self.bound_scorer.score(*self.shorten(x, y)) + wx + wy
         upper = min(upper, INF)
         handle = self.lib.am_nfa_join(
             self.handle, left.handle, right.handle, int(upper), 0, 0, self.counters
@@ -104,7 +112,7 @@ class Model:
         if any(c not in "012345678X" for c in parent):
             raise ValueError("Invalid parent symbol")
         chosen, offset = child.choose()
-        upper = self.scorer.score(*self.shorten(parent, chosen), directed=True) + offset
+        upper = self.bound_scorer.score(*self.shorten(parent, chosen), directed=True) + offset
         upper = min(upper, INF)
         cost = C.c_int()
         # byref(cost) means 'let C++ fill this integer'; Python keeps it alive.
