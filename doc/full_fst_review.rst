@@ -25,10 +25,13 @@ Ancestral-search optimization
 
 Sibling joins reuse the pair search's feasible-path helper in
 ``common/src/feasible_path.hpp``. This supplies a tighter upper bound before
-``ancestors/src/nfa_engine.hpp`` runs the unchanged exact all-tie search.
+``ancestors/src/nfa_engine.hpp`` runs the exact all-tie search.
 Read the `ancestral optimization note <ancestral_search_optimization.rst>`_
 for Python-style pseudocode, the offsets/weights accounting and benchmarks.
-The inherited PDF predates both capped-model search optimizations.
+A subsequent forward-edge filter avoids relaxations that Boost would reject.
+Read the `follow-up search note <search_relaxation_optimization.rst>`_ before
+reviewing that callback; the backward pass still regenerates all tied labels.
+The inherited PDF predates these capped-model search optimizations.
 
 Start in Python
 ---------------

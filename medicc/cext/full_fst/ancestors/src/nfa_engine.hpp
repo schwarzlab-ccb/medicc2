@@ -273,6 +273,7 @@ public:
 struct Stats {
     double *v;
     size_t expanded = 0, states = 0, generated = 0, tight = 0, det = 0;
+    size_t relaxation_skips = 0;
     double forward_seconds = 0, backward_seconds = 0, output_seconds = 0;
     ~Stats() {
         v[0] += expanded;
@@ -383,7 +384,11 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
         transitions(key, lev, cap - g, [&](int c, StateKey k, int w, int tail) {
             int t = insert(k, lev + 1);
             heuristic[t] = tail;
-            edges.push_back({s,t,w});
+            // Boost would reject this same non-improving distance. Avoid
+            // materializing the edge; the backward pass regenerates ALL labels
+            // and ties independently from the retained states.
+            if (g + w < nodes[t].g) edges.push_back({s,t,w});
+            else ++stats.relaxation_skips;
         });
     }, [&](int s) {return library_search::Rank{heuristic[s],0,s};});
     stats.forward_seconds += elapsed(forward_start);
@@ -559,6 +564,7 @@ extern "C" void *am_nfa_join(void *h, void *l, void *r, int upper, int kind, int
                       << ",\"score\":" << (d.start < 0 ? -1 : d.offset)
                       << ",\"expansions\":" << stats.expanded << ",\"states\":" << stats.states
                       << ",\"generated\":" << stats.generated
+                      << ",\"relaxation_skips\":" << stats.relaxation_skips
                       << ",\"forward\":" << stats.forward_seconds
                       << ",\"backward\":" << stats.backward_seconds
                       << ",\"output\":" << stats.output_seconds << "}";

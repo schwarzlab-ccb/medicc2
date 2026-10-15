@@ -38,6 +38,12 @@ topology, ancestor profiles and branch lengths matched. See
 [the ancestral optimization review](doc/ancestral_search_optimization.rst)
 for the bound, validation and timing scope.
 
+A small additional filter skips forward edges that Boost cannot use to improve
+a prefix distance. Two controlled comparisons reduced reconstruction time by
+7.6–9.5% on one selected tree, preserving all optimal ancestor ties. See
+[the follow-up search review](doc/search_relaxation_optimization.rst) for its
+correctness argument, limits and rejected trials.
+
 # MEDICC full L_LOH / two-WGD reference branch
 
 This is a standalone MEDICC source tree for reviewing the full-FST implementation.
