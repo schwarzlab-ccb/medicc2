@@ -5,6 +5,7 @@
 // unpruned optimum for all internal profiles on a tree.
 // Direct primitive tuples. Determinize only the globally optimal ancestor NFA.
 #include "lazy_trace.hpp"
+#include "../../common/src/feasible_path.hpp"
 #include <chrono>
 #include <sstream>
 #include <atomic>
@@ -538,10 +539,22 @@ extern "C" void *am_nfa_join(void *h, void *l, void *r, int upper, int kind, int
                 Stats stats{counters[index].data()};
                 auto branch_start = SearchClock::now();
                 auto future = chromosome_bound::future(lm, rm, 3*item[1] + item[2]);
-                auto d = search(*left[item[1]], *right[item[2]], mask, bound, limit, stats, future, &best);
+                // A complete walk through both child languages supplies a safe
+                // incumbent. It cannot remove an optimal or equally optimal word.
+                auto &x = *left[item[1]], &y = *right[item[2]];
+                int offset = a.offset + b.offset + x.wg + y.wg;
+                int initial_bound = bound;
+                bound = offset + feasible_path::cost(x, y, mask, bound - offset);
+                int previous = best.load(std::memory_order_relaxed);
+                while (bound < previous && !best.compare_exchange_weak(previous, bound)) {}
+                bound = min(bound, best.load(std::memory_order_relaxed));
+                double witness_seconds = elapsed(branch_start);
+                auto d = search(x, y, mask, bound, limit, stats, future, &best);
                 std::ostringstream trace;
                 trace << "{\"left_wgd\":" << item[1] << ",\"right_wgd\":" << item[2]
                       << ",\"seconds\":" << elapsed(branch_start)
+                      << ",\"initial_upper\":" << initial_bound
+                      << ",\"witness_seconds\":" << witness_seconds
                       << ",\"upper\":" << bound << ",\"lower\":" << item[0]
                       << ",\"score\":" << (d.start < 0 ? -1 : d.offset)
                       << ",\"expansions\":" << stats.expanded << ",\"states\":" << stats.states

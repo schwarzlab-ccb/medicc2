@@ -28,6 +28,16 @@ all 31,375 distances and the inferred topology identical. This is a single-case
 measurement, not an average speedup. See [the optimization review](doc/pair_search_optimization.rst)
 for the algorithm, failed lower-bound trials, validation and timing scope.
 
+Ancestral sibling joins now use the same feasible-path helper before exact
+all-tie search. Across nine difficult 250-leaf trees, reconstruction was
+1.04–2.50× faster (median 1.83×), with identical profiles and branch costs.
+The completed 250-leaf workflow benchmark took 4.1 minutes
+versus 74.9 minutes for the original capped implementation; ancestral
+reconstruction within that run took 147.2 versus 312.8 seconds. All distances,
+topology, ancestor profiles and branch lengths matched. See
+[the ancestral optimization review](doc/ancestral_search_optimization.rst)
+for the bound, validation and timing scope.
+
 # MEDICC full L_LOH / two-WGD reference branch
 
 This is a standalone MEDICC source tree for reviewing the full-FST implementation.
@@ -193,6 +203,7 @@ Tool-only checks (no input datasets are included):
 ```bash
 python -B tests/check_pairs.py
 python -B tests/check_oracle.py
+python -B tests/check_ancestor_bounds.py
 python -B tests/check_api.py
 python -B tests/check_bindings.py
 ```

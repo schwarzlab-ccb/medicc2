@@ -20,6 +20,16 @@ The `optimization note <pair_search_optimization.rst>`_ gives Python-style
 pseudocode, the correctness argument and measured results. The inherited PDF
 predates this optimization; read this note alongside its pair-search slides.
 
+Ancestral-search optimization
+-----------------------------
+
+Sibling joins reuse the pair search's feasible-path helper in
+``common/src/feasible_path.hpp``. This supplies a tighter upper bound before
+``ancestors/src/nfa_engine.hpp`` runs the unchanged exact all-tie search.
+Read the `ancestral optimization note <ancestral_search_optimization.rst>`_
+for Python-style pseudocode, the offsets/weights accounting and benchmarks.
+The inherited PDF predates both capped-model search optimizations.
+
 Start in Python
 ---------------
 

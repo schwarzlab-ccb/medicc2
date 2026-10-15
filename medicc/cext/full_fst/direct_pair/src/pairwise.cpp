@@ -1,6 +1,7 @@
 // Exact fixed-string distances using the validated full L_LOH primitive cascade.
 // No eager pullbacks, weighted subset construction, or incumbent-engine dependency.
 #include "direct_trace.hpp"
+#include "../../common/src/feasible_path.hpp"
 
 namespace pair_direct {
 static int changes(const vector<int>& a, const vector<int>& b) {
@@ -109,36 +110,9 @@ extern "C" double am_pair_score_whole(void *handle,const char *xx,const char *yy
 }
 
 namespace pair_direct {
-// Pick one complete path using the EXISTING primitive transitions and suffix
-// heuristic. For each ancestor symbol the two child edges are independent, so
-// their best edges can be chosen without enumerating their Cartesian product.
-// A failed greedy walk leaves the previous feasible upper bound unchanged.
-// The exact search below still certifies every returned chromosome score.
 static int greedy_witness(direct_nfa::Side &a, direct_nfa::Side &b,
                           const vector<int> &mask, int upper) {
-    uint64_t left=a.start(), right=b.start();
-    int cost=0;
-    for (int allowed : mask) {
-        auto ap=a.prepare(left), bp=b.prepare(right);
-        int best=INF, step=0;
-        uint64_t next_left=0, next_right=0;
-        for (int c=0; c<9; ++c) if (allowed & (1<<c)) {
-            int room=upper-cost;
-            if (ap.lower[0][c]+bp.lower[0][c]>room) continue;
-            auto le=a.edges(ap,c,room-bp.lower[0][c]);
-            if (le.empty()) continue;
-            auto re=b.edges(bp,c,room-le.front().w-le.front().h);
-            if (re.empty()) continue;
-            const auto &x=le.front(); const auto &y=re.front();
-            int value=x.w+y.w+x.h+y.h;
-            if (value<best) {
-                best=value;step=x.w+y.w;next_left=x.to;next_right=y.to;
-            }
-        }
-        if (best>=INF) return upper;
-        cost+=step;left=next_left;right=next_right;
-    }
-    return min(upper,cost+a.final(left)+b.final(right));
+    return feasible_path::cost(a, b, mask, upper);
 }
 }
 namespace factorized {
