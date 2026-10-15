@@ -1,3 +1,7 @@
+#if defined(IE_VARIATION_BOUND) || defined(IE_LOCAL_BOUND)
+#error "Legacy optional bound tables are for strict doubling; use the capped chromosome bound"
+#endif
+#include "../../common/src/wgd_model.hpp"
 // Shared storage and primitive/DFA operations. The historical filename is NOT
 // a two-million-state cap: the submitted/review configuration has no such cap.
 // Read Node, DFA, readpart and minimize first. pull is older weighted-subset

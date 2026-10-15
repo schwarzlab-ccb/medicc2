@@ -239,7 +239,7 @@ struct Half : Language {
         offset = q->offset;
     }
     Edge step(int s, int c) override {
-        return c == 9 ? inner->step(s, 9) : (c <= 4 ? inner->step(s, 2 * c) : Edge{});
+        return c == 9 ? inner->step(s, 9) : inner->step(s, wgd_model::double_cn(c));
     }
     int final(int s) override {
         return inner->final(s);

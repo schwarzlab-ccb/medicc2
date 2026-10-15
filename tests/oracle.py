@@ -6,7 +6,7 @@ def get_parts():
     sym = medicc.create_symbol_table(8, 'X')
     p = medicc.create_copynumber_fst(symbol_table=sym, sep='X', enable_wgd=True,
                                   max_num_wgds=3, wgd_x2=True, output_all=True)
-    p['W1'] = medicc.factory.create_1step_WGD_fst(sym, 'X', wgd_cost=1, minimize=True, wgd_x2=True)
+    p['W1'] = medicc.factory.create_1step_WGD_fst(sym, 'X', wgd_cost=1, minimize=True, wgd_x2=True, wgd_cap=True)
     # Keep L_LOH and G separate. This independently checks the detmin NOWGD path.
     return p, sym
 

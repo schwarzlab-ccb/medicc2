@@ -74,14 +74,14 @@ static vector<DFA> branches(AM *m, const DFA &a, bool forward, bool literal, int
         for (int k = 0; k <= ANCESTRAL_MAX_WGDS; k++) {
             m->core.budget = cap >= INF ? INF : cap - k;
             if (k > 0) {
-                // Mandatory x2 is a deterministic relabel/filter, including identity X.
+                // Capped x2 is a deterministic relabel, including identity X.
                 DFA half = q;
                 for (auto &n : half.v) {
                     Node v;
                     v.fin = n.fin;
-                    for (int c = 0; c <= 4; c++) {
-                        v.to[c] = n.to[2 * c];
-                        v.w[c] = n.w[2 * c];
+                    for (int c = 0; c <= 8; c++) {
+                        v.to[c] = n.to[wgd_model::double_cn(c)];
+                        v.w[c] = n.w[wgd_model::double_cn(c)];
                     }
                     v.to[9] = n.to[9];
                     v.w[9] = n.w[9];
@@ -346,8 +346,8 @@ void *am_load(const char *file) {
         m->d.start = 0;
         m->d.fin = {0};
         m->d.arcs.resize(1);
-        for (int c = 0; c <= 4; c++)
-            m->d.arcs[0][c].push_back({2 * c, 0, 0});
+        for (int c = 0; c <= 8; c++)
+            m->d.arcs[0][c].push_back({wgd_model::double_cn(c), 0, 0});
         m->d.arcs[0][9].push_back({9, 0, 0});
         return m.release();
     } catch (exception &e) {

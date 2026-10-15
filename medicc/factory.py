@@ -114,7 +114,10 @@ def create_loh_fst(symbol_table, separator='X', scale=1, det_min=True):
 
 
 def create_1step_WGD_fst(symbol_table, separator='X', wgd_cost=1, minimize=True, wgd_x2=False,
-                         total_cn=False):
+                         total_cn=False, wgd_cap=False):
+    """One optional WGD; wgd_cap saturates x2 outputs at the alphabet maximum."""
+    if wgd_cap and not wgd_x2:
+        raise ValueError("wgd_cap requires wgd_x2")
 
     if total_cn:
         wgd_distance = 2.
@@ -133,7 +136,7 @@ def create_1step_WGD_fst(symbol_table, separator='X', wgd_cost=1, minimize=True,
     W.set_final(2, 0)
     if wgd_x2:
         W.add_arcs(0, [(s, t, wgd_cost, 1) for s in cns.keys()
-                    for t in cns.keys() if (s != '0') and ((cns[t]/cns[s]) == 2.)])
+                    for t in cns.keys() if (s != '0') and (cns[t] == (min(2*cns[s], max(cns.values())) if wgd_cap else 2*cns[s]))])
     else:
         W.add_arcs(0, [(s, t, wgd_cost, 1) for s in cns.keys()
                     for t in cns.keys() if (s != '0') and ((cns[t]-cns[s]) == wgd_distance)])
@@ -141,7 +144,7 @@ def create_1step_WGD_fst(symbol_table, separator='X', wgd_cost=1, minimize=True,
     W.add_arc(1, ('0', '0', 0, 1))
     if wgd_x2:
         W.add_arcs(1, [(s, t, 0, 1) for s in cns.keys()
-                    for t in cns.keys() if (s != '0') and ((cns[t]/cns[s]) == 2.)])
+                    for t in cns.keys() if (s != '0') and (cns[t] == (min(2*cns[s], max(cns.values())) if wgd_cap else 2*cns[s]))])
     else:
         W.add_arcs(1, [(s, t, 0, 1) for s in cns.keys()
                     for t in cns.keys() if (s != '0') and ((cns[t]-cns[s]) == wgd_distance)])

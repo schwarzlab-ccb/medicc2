@@ -1,3 +1,23 @@
+# Capped-WGD pilot branch
+
+Branch `full-fst-lloh-wgd2-capped-x2`, based on `full-fst-lloh-wgd2` at
+`f050793`. Mandatory WGD now maps `c -> min(2*c, 8)` for CN 0–8;
+X remains X. WGD costs one per genome, with at most two per directed edge.
+This is a model change, not merely a search optimization. Other events still
+operate on the bounded 0–8 alphabet; this does not model hidden CN above 8.
+
+The native cascade, backward relabeling, traceback, optional-WGD assets and
+chromosome-bound tables use the same capped mapping. Even-input suffix bounds
+remain valid because capped doubling still emits only even CNs. The existing
+strict-doubling feasible witnesses remain valid upper bounds for this expanded
+model. The independent OpenFST oracle uses `wgd_cap=True`; legacy factory
+calls keep their previous default. Regenerate bounds with
+`python scripts/generate_chromosome_bound.py`, then build as below.
+
+Paired 250-leaf pilot scripts and results are external to this tool checkout.
+The inherited algorithm PDF explains the parent branch; its strict-doubling
+examples are superseded by this paragraph for this experimental branch.
+
 # MEDICC full L_LOH / two-WGD reference branch
 
 This is a standalone MEDICC source tree for reviewing the full-FST implementation.
@@ -81,8 +101,13 @@ with PairScorer() as scorer:
 
 ## Review entry points
 
-Start with [the Python-first review guide](doc/full_fst_review.rst), including
-the module map, native reading order, ownership rules and a C++ translation key.
+Read this README, then [the Python-first review guide](doc/full_fst_review.rst),
+then [the algorithm slides (PDF, 22 slides)](doc/full_fst_algorithms.pdf).
+The guide covers the module map, ownership rules and a C++ translation key;
+the slides explain the model, searches and division of work between Python,
+custom C++, OpenFST and Boost.Graph. Then start the code review at
+[`reconstruct()` in medicc/full_fst/core.py](medicc/full_fst/core.py).
+For the command-line entry, follow `medicc2` into `medicc/full_fst/cli.py`.
 
 
 - `medicc2` and `medicc/full_fst/cli.py`: general tool entry point.

@@ -27,9 +27,7 @@ static string recover(Language &q, const string &input) {
         string next = input;
         for (char &c : next)
             if (c != 'X') {
-                if (c > '4')
-                    throw runtime_error("invalid doubling traceback");
-                c = '0' + 2 * (c - '0');
+                c = '0' + wgd_model::double_cn(c - '0');
             }
         return recover(*h->inner, next);
     }

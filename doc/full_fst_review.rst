@@ -1,15 +1,30 @@
 Reviewing the full L_LOH / two-WGD reference
 ==========================================
 
+Capped-WGD branch
+-----------------
+
+This experimental branch changes mandatory doubling to min(2*c, 8).
+See README.md for the model difference and scripts/generate_chromosome_bound.py
+for its regenerated admissible bounds. The inherited PDF describes the parent
+model; the ownership and algorithm structure still apply.
+
 Start in Python
 ---------------
 
 This branch keeps MEDICC's Python package and workflow. The new backend is
 medicc.full_fst; compiled sources live under medicc/cext/full_fst, alongside the
-native-extension directory already used in medicc2-pre-pub. This folder is the full-fst-lloh-wgd2 branch worktree of medicc2. The original
+native-extension directory already used in medicc2-pre-pub.
+This folder is the full-fst-lloh-wgd2 branch worktree of medicc2. The original
 medicc2 working checkout and the medicc2-pre-pub checkout remain unchanged.
 
-Suggested reading order, all paths relative to this tool folder:
+The review route is README.md, this guide, the
+`algorithm slides (PDF, 22 slides) <full_fst_algorithms.pdf>`_, then the code.
+The slides illustrate the full model, lazy search, retention of all tied
+ancestors, and the OpenFST/Boost.Graph boundary using Python-style pseudocode
+and a worked example.
+
+Suggested code reading order, all paths relative to this tool folder:
 
 1. medicc/full_fst/core.py: reconstruct() is the public workflow. It encodes
    profiles, obtains a topology from FastME or the caller, reconstructs ancestors,

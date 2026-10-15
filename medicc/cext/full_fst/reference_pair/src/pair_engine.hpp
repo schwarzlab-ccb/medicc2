@@ -1,3 +1,7 @@
+#if defined(IE_VARIATION_BOUND) || defined(IE_LOCAL_BOUND)
+#error "Legacy optional bound tables are for strict doubling; use the capped chromosome bound"
+#endif
+#include "../../common/src/wgd_model.hpp"
 // REVIEW NOTE: Independent exact pair scorer: feasible witnesses and final edge rescoring.
 // C ABI ie_load/ie_free own a Model pointer; ie_score borrows it. Its cache
 // uses shared_ptr<DFA> (reference-counted ownership). get() on a shared_ptr
@@ -238,9 +242,9 @@ static DFA half(const DFA &a) {
     for (auto &n : d.v) {
         Node q;
         q.fin = n.fin;
-        for (int c = 0; c <= 4; c++) {
-            q.to[c] = n.to[2 * c];
-            q.w[c] = n.w[2 * c];
+        for (int c = 0; c <= 8; c++) {
+            q.to[c] = n.to[wgd_model::double_cn(c)];
+            q.w[c] = n.w[wgd_model::double_cn(c)];
         }
         n = q;
     }
