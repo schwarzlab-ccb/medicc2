@@ -13,7 +13,7 @@
 // through a borrowed Side pointer.
 struct AM {
     Model core;
-    Part loh, lg, l, g, w, d, a;
+    Part loh, lg, l, g, w, d, a, ad;
     double visited = 0, peak = 0;
 };
 static vector<vector<int>> levels(const DFA &a) {
@@ -265,6 +265,7 @@ void *am_load(const char *file) {
         m->g = readpart(f, "G");
         m->w = readpart(f, "W1");
         m->a = readpart(f, "A");
+        m->ad = readpart(f, "AD");
         m->d.start = 0;
         m->d.fin = {0};
         m->d.arcs.resize(1);

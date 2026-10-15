@@ -144,7 +144,8 @@ extern "C" const char *am_direct_resolve(void *h, const char *parent, void *c, i
                 throw runtime_error("invalid parent symbol");
         if (child.start < 0)
             throw runtime_error("No feasible conditional ancestor");
-        auto branches = direct_nfa::branches(m, child, 0, false);
+        auto branches = direct_nfa::branches(m, child, 0,
+            /*with_chrom=*/false, /*compact_wgd=*/false);
         vector<pair<int, int>> order;
         for (int i = 0; i < int(branches.size()); i++) {
             auto &a = *branches[i];

@@ -530,11 +530,9 @@ static vector<unique_ptr<Side>> branches(AM *m, const DFA &d, int kind, bool wit
     if (kind != 0) throw runtime_error("L_LOH pilot supports only the full cascade");
     vector<unique_ptr<Side>> out;
     for (int k = 0; k <= ANCESTRAL_MAX_WGDS; k++) {
-        vector<const Part *> chain = {&m->a};
-        for (int j = 0; j < k; j++) {
-            chain.push_back(&m->d);
-            chain.push_back(&m->a);
-        }
+        // Exact weighted factor reduction A (D A)^k = (A D)^k A.
+        vector<const Part *> chain(k, &m->ad);
+        chain.push_back(&m->a);
         // Fused A receives even CN directly from the last mandatory D.
         // Its internal loss/gain histories remain unrestricted.
         out.push_back(make_unique<Side>(d, chain, k, k > 0 ? 2 : 1,

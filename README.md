@@ -2,47 +2,38 @@
 
 Branch `full-fst-lloh-wgd2-capped-x2-opt`, based on
 `full-fst-lloh-wgd2-capped-x2` at `0c66cd9` (the capped model originated from
-`full-fst-lloh-wgd2` at `f050793`). Mandatory WGD now maps `c -> min(2*c, 8)` for CN 0–8;
+`full-fst-lloh-wgd2` at `f050793`). Mandatory WGD maps `c -> min(2*c, 8)` for CN 0–8;
 X remains X. WGD costs one per genome, with at most two per directed edge.
-This is a model change, not merely a search optimization. Other events still
-operate on the bounded 0–8 alphabet; this does not model hidden CN above 8.
+Other events still operate on the bounded 0–8 alphabet; this does not model
+hidden CN above 8.
 
-The native cascade, backward relabeling, traceback, optional-WGD assets and
-chromosome-bound tables use the same capped mapping. Even-input suffix bounds
-remain valid because capped doubling still emits only even CNs. The existing
-strict-doubling feasible witnesses remain valid upper bounds for this expanded
-model. The independent OpenFST oracle uses `wgd_cap=True`; legacy factory
-calls keep their previous default. Regenerate bounds with
-`python scripts/generate_chromosome_bound.py`, then build as below.
+The current implementation uses an **OpenFST-reduced AD factor**, a
+**shared-ancestor pattern bound**, and faster exact suffix-table preparation.
+The existing Boost.Graph A* and backward language reconstruction remain in use.
+All optimal ancestor ties are retained. Downward reconstruction keeps the
+original primitive order so its historical choice among tied profiles is stable.
 
-Paired 250-leaf pilot scripts and results are external to this tool checkout.
-The inherited algorithm PDF explains the parent branch; its strict-doubling
-examples are superseded by this paragraph for this experimental branch.
+Across nine selected difficult 250-leaf trees, median reconstruction time is
+**26.4 seconds**, a median **6.06× speedup** over the earlier warm-start capped
+implementation. All profiles and branch costs match. The hardest case changed
+from **1,162 to 55.3 seconds**, close to its old uncapped 47.7 seconds; peak RAM
+fell from about 9.5 to 2.4 GiB. A same-allocation comparison against the immediate
+parent changed 107.6 to 25.3 seconds. These are selected-case measurements;
+the old uncapped implementation has not received the new optimizations.
 
-Pairwise distance searches now start from cheap **feasible chromosome histories**.
-They provide tighter upper bounds; the existing exact search still proves every
-returned score. Fixed WGD counts remain shared across chromosomes. The change
-uses the existing C++ transition routines and adds no dependency. In one full
-250-leaf comparison, distance time fell from 69.4 minutes to 79.1 seconds, with
-all 31,375 distances and the inferred topology identical. This is a single-case
-measurement, not an average speedup. See [the optimization review](doc/pair_search_optimization.rst)
-for the algorithm, failed lower-bound trials, validation and timing scope.
+Read [the search-explosion review](doc/search_explosion_optimization.rst) for
+Python-style pseudocode, the exactness proof, complete timings and limitations.
+Earlier changes are documented in the [pair warm-start note](doc/pair_search_optimization.rst),
+[ancestral warm-start note](doc/ancestral_search_optimization.rst), and
+[forward-relaxation note](doc/search_relaxation_optimization.rst).
 
-Ancestral sibling joins now use the same feasible-path helper before exact
-all-tie search. Across nine difficult 250-leaf trees, reconstruction was
-1.04–2.50× faster (median 1.83×), with identical profiles and branch costs.
-The completed 250-leaf workflow benchmark took 4.1 minutes
-versus 74.9 minutes for the original capped implementation; ancestral
-reconstruction within that run took 147.2 versus 312.8 seconds. All distances,
-topology, ancestor profiles and branch lengths matched. See
-[the ancestral optimization review](doc/ancestral_search_optimization.rst)
-for the bound, validation and timing scope.
-
-A small additional filter skips forward edges that Boost cannot use to improve
-a prefix distance. Two controlled comparisons reduced reconstruction time by
-7.6–9.5% on one selected tree, preserving all optimal ancestor ties. See
-[the follow-up search review](doc/search_relaxation_optimization.rst) for its
-correctness argument, limits and rejected trials.
+Model assets use the same capped mapping throughout. Regenerate chromosome
+bounds with `python scripts/generate_chromosome_bound.py`; generate the compact
+factor with `python scripts/generate_capped_ad.py --help`, then build as below.
+The independent OpenFST oracle uses `wgd_cap=True`; legacy factory calls keep
+their previous default. Pilot scripts, datasets and results remain outside this
+tool checkout. The inherited PDF explains the parent model and predates these
+optimizations; use the review notes for the current capped implementation.
 
 # MEDICC full L_LOH / two-WGD reference branch
 

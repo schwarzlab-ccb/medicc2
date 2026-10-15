@@ -85,20 +85,30 @@ struct Side {
         auto partial = with_chrom ? make_shared<vector<int>>(d.v.size() * np, INF) : nullptr;
         auto ls = levels(d);
         auto &p = *parts.back();
+        // Group the permitted primitive arcs by the child label they consume.
+        // Sparse child messages then visit only compatible arcs. This is the
+        // same exact suffix recurrence, including final weights and X resets.
+        struct PotentialArc { int to, w; bool separator; };
+        vector<array<vector<PotentialArc>, 10>> by_output(np);
+        for (int q = 0; q < np; ++q)
+            for (int c = 0; c < 10; ++c)
+                if (c == 9 || c % multiple == 0)
+                    for (const auto &e : p.arcs[q][c])
+                        by_output[q][e.out].push_back({e.to, e.w, c == 9});
         for (int lev = d.len; lev >= 0; lev--)
             for (int s : ls[lev])
                 for (int q = 0; q < np; q++) {
                     int z = min(INF, p.fin[q] + d.v[s].fin), cz = z;
-                    for (int c = 0; c < 10; c++)
-                        if (c == 9 || c % multiple == 0)
-                            for (auto &e : p.arcs[q][c]) {
-                                int t = d.v[s].to[e.out];
-                                if (t >= 0) {
-                                    z = min(z, e.w + d.v[s].w[e.out] + (*values)[size_t(t) * np + e.to]);
-                                    if (partial) cz = min(cz, e.w + d.v[s].w[e.out] +
-                                        (c == 9 ? 0 : (*partial)[size_t(t) * np + e.to]));
-                                }
-                            }
+                    for (int output = 0; output < 10; ++output) {
+                        int t = d.v[s].to[output];
+                        if (t < 0) continue;
+                        for (const auto &e : by_output[q][output]) {
+                            int weight = e.w + d.v[s].w[output];
+                            z = min(z, weight + (*values)[size_t(t) * np + e.to]);
+                            if (partial) cz = min(cz, weight +
+                                (e.separator ? 0 : (*partial)[size_t(t) * np + e.to]));
+                        }
+                    }
                     (*values)[size_t(s) * np + q] = min(z, INF);
                     if (partial) (*partial)[size_t(s) * np + q] = min(cz, INF);
                 }
@@ -213,6 +223,9 @@ struct Side {
         return out;
     }
 };
+} // direct_nfa
+#include "pattern_bound.hpp"
+namespace direct_nfa {
 struct StateKey {
     uint64_t a, b;
     bool operator==(const StateKey &o) const {
@@ -299,13 +312,14 @@ static DFA determinize(const vector<Tight> &n, int start, int len, int offset, S
 // ancestor symbol. upper is a cost of a FEASIBLE complete witness, not a beam.
 // Only f > cap can be discarded here: equality may encode another optimal word.
 static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limit, Stats &stats, const vector<int> &future,
-                  std::atomic<int> *incumbent = nullptr) {
+                  std::atomic<int> *incumbent = nullptr, const sibling_pattern::Bound *pattern = nullptr) {
     DFA empty;
     empty.len = a.child->len;
     int offset = a.child->offset + b.child->offset + a.wg + b.wg;
     int cap = upper >= INF ? INF : upper - offset;
     int h0 = max(a.h(a.start()) + b.h(b.start()),
                  a.chrom_h(a.start()) + b.chrom_h(b.start()) + future[0]);
+    if (pattern) h0=max(h0,pattern->at(0,a,a.start(),b,b.start()));
     if (h0 >= INF || h0 > cap)
         return empty;
     vector<SearchState> nodes;
@@ -351,6 +365,7 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
                         // costs are disjoint. Never add this to the full old bound.
                         int tail = max(x.h + y.h,
                             a.chrom_h(x.to) + b.chrom_h(y.to) + future[lev + 1]);
+                        if (pattern) tail=max(tail,pattern->at(lev+1,a,x.to,b,y.to));
                         if (x.w + y.w + tail > remaining) continue;
                         stats.generated++;
                         fn(c, StateKey{x.to, y.to}, x.w + y.w, tail);
@@ -467,15 +482,24 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
 // Full L_LOH cascade: A (D A)^k, A=L_LOH*G, k=0..2.
 // The certified A*A=A identity collapses skipped optional W1 slots.
 // Mandatory D has zero arc cost; charge k once for the entire genome.
-static vector<unique_ptr<Side>> branches(AM *m, const DFA &d, int kind, bool with_chrom = true) {
+static vector<unique_ptr<Side>> branches(AM *m, const DFA &d, int kind,
+                                              bool with_chrom = true, bool compact_wgd = true) {
     if (kind != 0) throw runtime_error("L_LOH pilot supports only the full cascade");
     vector<unique_ptr<Side>> out;
     for (int k = 0; k <= ANCESTRAL_MAX_WGDS; k++) {
-        vector<const Part *> chain = {&m->a};
-        for (int j = 0; j < k; j++) {
-            chain.push_back(&m->d);
-            chain.push_back(&m->a);
+        // OpenFST determinize/minimize preserves the weighted relation A D.
+        // Group A (D A)^k as (A D)^k A; no full history transducer is built.
+        vector<const Part *> chain;
+        for (int j = 0; j < k; ++j) {
+            if (compact_wgd) chain.push_back(&m->ad);
+            else {
+                // Keep the original state ordering when choosing one downward
+                // representative among equally optimal profiles.
+                chain.push_back(&m->a);
+                chain.push_back(&m->d);
+            }
         }
+        chain.push_back(&m->a);
         // Fused A receives even CN directly from the last mandatory D.
         // Its internal loss/gain histories remain unrestricted.
         out.push_back(make_unique<Side>(d, chain, k, k > 0 ? 2 : 1,
@@ -554,7 +578,10 @@ extern "C" void *am_nfa_join(void *h, void *l, void *r, int upper, int kind, int
                 while (bound < previous && !best.compare_exchange_weak(previous, bound)) {}
                 bound = min(bound, best.load(std::memory_order_relaxed));
                 double witness_seconds = elapsed(branch_start);
-                auto d = search(x, y, mask, bound, limit, stats, future, &best);
+                unique_ptr<sibling_pattern::Bound> pattern;
+                if(item[1]<=1 && item[2]<=1)
+                    pattern=make_unique<sibling_pattern::Bound>(m->ad,m->a,lm,rm,item[1],item[2]);
+                auto d = search(x, y, mask, bound, limit, stats, future, &best, pattern.get());
                 std::ostringstream trace;
                 trace << "{\"left_wgd\":" << item[1] << ",\"right_wgd\":" << item[2]
                       << ",\"seconds\":" << elapsed(branch_start)

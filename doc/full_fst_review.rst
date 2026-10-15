@@ -33,6 +33,16 @@ Read the `follow-up search note <search_relaxation_optimization.rst>`_ before
 reviewing that callback; the backward pass still regenerates all tied labels.
 The inherited PDF predates these capped-model search optimizations.
 
+Reducing the search explosion
+-----------------------------
+
+Read the `new search review <search_explosion_optimization.rst>`_ before the
+native join. OpenFST reduces A followed by capped doubling to a smaller exact
+factor. ``ancestors/src/pattern_bound.hpp`` solves a small relaxed sibling
+problem to guide Boost A*. ``nfa_engine.hpp`` also indexes suffix transitions by
+observed child label. The downward resolver keeps the original primitive order
+to preserve historical tie choices. The inherited PDF predates these changes.
+
 Start in Python
 ---------------
 
