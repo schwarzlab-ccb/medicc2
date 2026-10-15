@@ -1,3 +1,7 @@
+Experimental distance optimization: this branch restores the original
+short-chromosome-first policy. See [the review note](doc/pair_distance_outliers.rst)
+for its provenance, exactness argument and matrix validation.
+
 # Optimized capped-WGD pilot branch
 
 Branch `full-fst-lloh-wgd2-capped-x2-opt`, based on

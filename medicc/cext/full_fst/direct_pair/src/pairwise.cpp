@@ -199,7 +199,11 @@ static int score(AM*m,const string&x,const string&y,double*stat) {
         int bound=k/3+k%3;
         vector<Chunk*> order;
         for(auto&c:chunks){bound+=c->lower[k];order.push_back(c.get());}
-        sort(order.begin(),order.end(),[k](Chunk*a,Chunk*b){return a->lower[k]>b->lower[k];});
+        // Restore the short-chromosome-first policy from the original scorer.
+        // Cheap exact factors can rule out this global WGD choice before a
+        // costly chromosome is searched. Only evaluation order changes; all
+        // chromosomes still share k, and their costs remain independent sums.
+        sort(order.begin(),order.end(),[](Chunk*a,Chunk*b){return a->x.size()<b->x.size();});
         for(auto*c:order) {
             if(bound>=best)break;
             int before=c->lower[k],room=best-(bound-before);
