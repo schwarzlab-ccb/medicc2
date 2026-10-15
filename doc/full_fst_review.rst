@@ -9,13 +9,24 @@ See README.md for the model difference and scripts/generate_chromosome_bound.py
 for its regenerated admissible bounds. The inherited PDF describes the parent
 model; the ownership and algorithm structure still apply.
 
+Pair-search optimization
+------------------------
+
+The capped model now seeds each chromosome's exact pair search with a feasible
+history, then searches only for a cheaper one. This changes the search budget,
+not the optimal distance or WGD model. Start with ``chromosome_witness`` and
+``greedy_witness`` in ``direct_pair/src/pairwise.cpp`` when reviewing this change.
+The `optimization note <pair_search_optimization.rst>`_ gives Python-style
+pseudocode, the correctness argument and measured results. The inherited PDF
+predates this optimization; read this note alongside its pair-search slides.
+
 Start in Python
 ---------------
 
 This branch keeps MEDICC's Python package and workflow. The new backend is
 medicc.full_fst; compiled sources live under medicc/cext/full_fst, alongside the
 native-extension directory already used in medicc2-pre-pub.
-This folder is the full-fst-lloh-wgd2 branch worktree of medicc2. The original
+This folder is the full-fst-lloh-wgd2-capped-x2-opt branch worktree of medicc2. The original
 medicc2 working checkout and the medicc2-pre-pub checkout remain unchanged.
 
 The review route is README.md, this guide, the

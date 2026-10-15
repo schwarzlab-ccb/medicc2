@@ -1,7 +1,8 @@
-# Capped-WGD pilot branch
+# Optimized capped-WGD pilot branch
 
-Branch `full-fst-lloh-wgd2-capped-x2`, based on `full-fst-lloh-wgd2` at
-`f050793`. Mandatory WGD now maps `c -> min(2*c, 8)` for CN 0–8;
+Branch `full-fst-lloh-wgd2-capped-x2-opt`, based on
+`full-fst-lloh-wgd2-capped-x2` at `0c66cd9` (the capped model originated from
+`full-fst-lloh-wgd2` at `f050793`). Mandatory WGD now maps `c -> min(2*c, 8)` for CN 0–8;
 X remains X. WGD costs one per genome, with at most two per directed edge.
 This is a model change, not merely a search optimization. Other events still
 operate on the bounded 0–8 alphabet; this does not model hidden CN above 8.
@@ -18,6 +19,15 @@ Paired 250-leaf pilot scripts and results are external to this tool checkout.
 The inherited algorithm PDF explains the parent branch; its strict-doubling
 examples are superseded by this paragraph for this experimental branch.
 
+Pairwise distance searches now start from cheap **feasible chromosome histories**.
+They provide tighter upper bounds; the existing exact search still proves every
+returned score. Fixed WGD counts remain shared across chromosomes. The change
+uses the existing C++ transition routines and adds no dependency. In one full
+250-leaf comparison, distance time fell from 69.4 minutes to 79.1 seconds, with
+all 31,375 distances and the inferred topology identical. This is a single-case
+measurement, not an average speedup. See [the optimization review](doc/pair_search_optimization.rst)
+for the algorithm, failed lower-bound trials, validation and timing scope.
+
 # MEDICC full L_LOH / two-WGD reference branch
 
 This is a standalone MEDICC source tree for reviewing the full-FST implementation.
@@ -26,7 +36,7 @@ MEDICC sample names and input tables, adds a diploid normal when needed, and use
 FastME followed by full-model ancestral reconstruction. `--tree` accepts a supplied
 topology; `--nni-mode` enables MEDICC's incremental NNI search.
 
-This is the `full-fst-lloh-wgd2` Git branch of `medicc2`, based on
+The original `full-fst-lloh-wgd2` reference branch of `medicc2` was based on
 `imbalance_FST_tree_search_dev` at `c9dddb8c36d9`. The original working
 checkout and the `medicc2-pre-pub` checkout remain unchanged. The copied core and ancestor
 modules now dispatch directly to `medicc.full_fst.ancestors`; runtime monkeypatch

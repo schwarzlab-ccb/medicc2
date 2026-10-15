@@ -438,7 +438,10 @@ static DFA search(Side &a, Side &b, const vector<int> &mask, int upper, int limi
             }
             continue;
         }
-        transitions(key, lev, cap - g, [&](int c, Key k, int w, int tail) {
+        // Score-only callers seek a strict improvement. With integer weights,
+        // a transition that can only tie the cutoff can be rejected immediately.
+        // Language reconstruction still keeps every equal-cost optimum.
+        transitions(key, lev, cap - g - (score_only ? 1 : 0), [&](int c, Key k, int w, int tail) {
             int t = insert(k, lev + 1);
             if (g + w < nodes[t].g) {
                 nodes[t].g = g + w;

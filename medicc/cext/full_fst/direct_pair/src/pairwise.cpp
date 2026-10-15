@@ -13,6 +13,25 @@ static int changes(const vector<int>& a, const vector<int>& b) {
     }
     return value;
 }
+// A feasible chromosome history for FIXED WGD counts. All losses/gains
+// occur after the mandatory doublings; earlier A stages are identities.
+// Try constant positive ancestors and a binwise ancestor that needs only losses.
+// These are upper bounds, never lower bounds or approximated returned scores.
+static int chromosome_witness(const string &x, const string &y, int ka, int kb) {
+    vector<int> a(x.size()), b(y.size()), pa(x.size()), pb(y.size());
+    int fa=1<<ka, fb=1<<kb, best=INF;
+    for (size_t i=0; i<x.size(); ++i) {a[i]=x[i]-'0'; b[i]=y[i]-'0';}
+    for (int ancestor=1; ancestor<=8; ++ancestor) {
+        fill(pa.begin(),pa.end(),min(8,ancestor*fa));
+        fill(pb.begin(),pb.end(),min(8,ancestor*fb));
+        best=min(best,changes(pa,a)+changes(pb,b));
+    }
+    for (size_t i=0; i<x.size(); ++i) {
+        int ancestor=max((a[i]+fa-1)/fa,(b[i]+fb-1)/fb);
+        pa[i]=min(8,ancestor*fa); pb[i]=min(8,ancestor*fb);
+    }
+    return min(best,changes(pa,a)+changes(pb,b));
+}
 // A concrete history: choose a binwise ancestor, apply k exact global doublings,
 // then interval unit losses. All intermediate copy numbers remain in 0..8.
 static int witness(const string& x,const string& y,bool directed) {
@@ -89,13 +108,46 @@ extern "C" double am_pair_score_whole(void *handle,const char *xx,const char *yy
     }catch(exception&e){error=e.what();return -1;}
 }
 
+namespace pair_direct {
+// Pick one complete path using the EXISTING primitive transitions and suffix
+// heuristic. For each ancestor symbol the two child edges are independent, so
+// their best edges can be chosen without enumerating their Cartesian product.
+// A failed greedy walk leaves the previous feasible upper bound unchanged.
+// The exact search below still certifies every returned chromosome score.
+static int greedy_witness(direct_nfa::Side &a, direct_nfa::Side &b,
+                          const vector<int> &mask, int upper) {
+    uint64_t left=a.start(), right=b.start();
+    int cost=0;
+    for (int allowed : mask) {
+        auto ap=a.prepare(left), bp=b.prepare(right);
+        int best=INF, step=0;
+        uint64_t next_left=0, next_right=0;
+        for (int c=0; c<9; ++c) if (allowed & (1<<c)) {
+            int room=upper-cost;
+            if (ap.lower[0][c]+bp.lower[0][c]>room) continue;
+            auto le=a.edges(ap,c,room-bp.lower[0][c]);
+            if (le.empty()) continue;
+            auto re=b.edges(bp,c,room-le.front().w-le.front().h);
+            if (re.empty()) continue;
+            const auto &x=le.front(); const auto &y=re.front();
+            int value=x.w+y.w+x.h+y.h;
+            if (value<best) {
+                best=value;step=x.w+y.w;next_left=x.to;next_right=y.to;
+            }
+        }
+        if (best>=INF) return upper;
+        cost+=step;left=next_left;right=next_right;
+    }
+    return min(upper,cost+a.final(left)+b.final(right));
+}
+}
 namespace factorized {
 // X resets every primitive to its start with zero weight. For fixed ka,kb,
 // all chromosomes are independent. Sum their event costs, add ka+kb ONCE,
 // and only then minimize the nine global WGD choices.
 struct Chunk {
     string x,y;
-    array<int,9> lower{};
+    array<int,9> lower{}, upper{};
     array<int,9>* exact;
     bool flipped;
     DFA a,b;
@@ -119,6 +171,7 @@ struct Chunk {
             lower[k]=(total+1)/2;
             int cached=(*exact)[cache_branch(k)];
             if(cached>=0)lower[k]=cached;
+            upper[k]=cached>=0 ? cached : pair_direct::chromosome_witness(x,y,k/3,k%3);
         }
     }
     void prepare(AM*m) {
@@ -136,8 +189,12 @@ struct Chunk {
         stat[4]++;
         prepare(m);
         int ka=branch/3,kb=branch%3,cost=INF;
+        int upper=this->upper[branch];
+        upper=pair_direct::greedy_witness(*left[ka],*right[kb],mask,upper);
         direct_nfa::Stats stats{stat};
-        direct_nfa::search(*left[ka],*right[kb],mask,room+ka+kb,0,stats,future,nullptr,&cost);
+        direct_nfa::search(*left[ka],*right[kb],mask,min(room,upper)+ka+kb,0,stats,future,nullptr,&cost);
+        // Failure below a known feasible upper bound certifies that upper bound.
+        if(cost>=INF && upper<room)cost=upper+ka+kb;
         if(cost<INF){cached=cost-ka-kb;lower[branch]=cached;return cached;}
         return INF;
     }
@@ -154,8 +211,11 @@ static int score(AM*m,const string&x,const string&y,double*stat) {
     }
     vector<pair<int,int>> branches;
     for(int k=0;k<9;++k) {
-        int bound=k/3+k%3;
-        for(auto&c:chunks)bound+=c->lower[k];
+        int bound=k/3+k%3, feasible=bound;
+        for(auto&c:chunks){bound+=c->lower[k];feasible+=c->upper[k];}
+        // Fixed WGD counts are shared across chromosomes and charged once.
+        // The independently feasible chromosome histories concatenate at X.
+        best=min(best,feasible);
         branches.push_back({bound,k});
     }
     sort(branches.begin(),branches.end());
