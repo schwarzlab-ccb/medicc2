@@ -303,3 +303,10 @@ Annotations use MEDICC's existing PyRanges overlap code. Install the optional
 package extra (`pip install '.[events]'`) or, for an already built checkout,
 `python -m pip install 'pyranges>=0.1,<0.2'`. Event calling without BED annotations
 does not require PyRanges. Validate with `python -B tests/check_event_annotations.py`.
+
+
+### FastME taxon-name compatibility
+
+Names at or above64UTF-8bytes are passed to FastME as unique short IDs. The original names are restored before MEDICC rooting and ancestral reconstruction. `fastme_taxa.tsv` records the bijection; `fastme_short_ids.nwk` retains FastME's short-ID output; `fastme_raw.nwk` contains the same tree with original names. Shorter supported names retain the existing interface. The64byte boundary is mapped as well because the installed FastME build produced invalid names there. Names are never truncated.
+
+Regression command: `python -s tests/check_fastme_labels.py` (optionally set `FASTME` to the binary path). Tests cover63/64/65byte names, colliding prefixes, original names resembling short IDs, restored branch distances, mismatched matrix axes, duplicate inputs and unexpected output taxa.

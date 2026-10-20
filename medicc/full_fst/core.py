@@ -191,20 +191,38 @@ def infer_tree(distances, normal_name, out, executable="fastme"):
         raise ValueError(
             "FastME sample IDs cannot contain whitespace or Newick punctuation"
         )
+    if len(labels) != len(set(labels)):
+        raise ValueError("FastME sample IDs must be unique")
+    if list(distances.columns) != labels:
+        raise ValueError("Distance matrix row and column labels must match in order")
     out = Path(out).resolve()
     out.mkdir(parents=True, exist_ok=True)
+    # FastME uses a 64-byte taxon-name buffer (including its terminator).
+    # Map names at that boundary too. Use a bijection rather than
+    # truncation; preserve the existing path for already-supported names.
+    remap = any(len(name.encode("utf-8")) >= 64 for name in labels)
+    fastme_labels = (
+        [f"T{i:08d}" for i in range(len(labels))] if remap else labels
+    )
+    restore = dict(zip(fastme_labels, labels))
+    raw_tree = out / ("fastme_short_ids.nwk" if remap else "fastme_raw.nwk")
+    if remap:
+        with (out / "fastme_taxa.tsv").open("w", newline="") as handle:
+            writer = csv.writer(handle, delimiter="\t")
+            writer.writerow(["fastme_id", "sample_id"])
+            writer.writerows(zip(fastme_labels, labels))
     matrix = out / "distances.phy"
-    width = max(map(len, labels)) + 1
+    width = max(map(len, fastme_labels)) + 1
     with matrix.open("w") as handle:
         handle.write(str(len(labels)) + "\n")
-        for label, row in zip(labels, distances.to_numpy()):
+        for label, row in zip(fastme_labels, distances.to_numpy()):
             handle.write(label.ljust(width) + " ".join(f"{v:.5f}" for v in row) + "\n")
     command = [
         binary,
         "-i",
         str(matrix),
         "-o",
-        str(out / "fastme_raw.nwk"),
+        str(raw_tree),
         "-I",
         str(out / "fastme_stats.txt"),
         "-m",
@@ -219,9 +237,17 @@ def infer_tree(distances, normal_name, out, executable="fastme"):
     process = subprocess.run(command, cwd=out, text=True, capture_output=True)
     (out / "fastme.log").write_text(process.stdout + "\n" + process.stderr)
     process.check_returncode()
-    tree = Phylo.read(out / "fastme_raw.nwk", "newick")
-    if {c.name for c in tree.get_terminals()} != set(labels):
+    tree = Phylo.read(raw_tree, "newick")
+    tips = tree.get_terminals()
+    if len(tips) != len(fastme_labels) or {c.name for c in tips} != set(fastme_labels):
         raise ValueError("FastME leaf labels differ")
+    if remap:
+        for tip in tips:
+            tip.name = restore[tip.name]
+        # Keep FastME's exact short-ID output as well as an original-name tree
+        # at the established path used by downstream tools.
+        with (out / "fastme_raw.nwk").open("w") as handle:
+            Phylo.write(tree, handle, "newick", format_branch_length="%.17g")
     return normalize_tree(tree, normal_name, labels, rename=True), command
 
 
