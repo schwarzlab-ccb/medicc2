@@ -47,6 +47,12 @@ def main(argv=None):
         action="store_true",
         help="Default stops after a sweep without strict improvement",
     )
+    parser.add_argument("--events", action="store_true",
+                        help="Call minimum-cost events using the capped full L_LOH/two-WGD model")
+    parser.add_argument("--chromosomes-bed", default="none",
+                        help="With --events: chromosome-arm BED file, default (hg38), or none")
+    parser.add_argument("--regions-bed", default="none",
+                        help="With --events: named-region BED file, default (Davoli genes), or none")
     parser.add_argument("--topology-only", "-s", action="store_true")
     parser.add_argument("--n-cores", "-j", type=int, default=1)
     parser.add_argument("--fastme", default="fastme")
@@ -60,6 +66,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.n_cores < 1:
         parser.error("--n-cores must be positive")
+    if args.events and args.topology_only:
+        parser.error("--events requires ancestors")
     if args.nni_mode and args.topology_only:
         parser.error("--nni-mode requires ancestors")
     if args.nni_max_topology is not None and args.nni_max_topology < 1:
@@ -68,6 +76,25 @@ def main(argv=None):
         parser.error("--nni-max-frontier must be positive")
     if args.topology_only and args.plot != "none":
         parser.error("Use --plot none with --topology-only")
+    annotate = args.chromosomes_bed != "none" or args.regions_bed != "none"
+    if annotate:
+        if not args.events:
+            parser.error("BED annotations require --events")
+        try:
+            import pyranges
+        except ImportError:
+            parser.error("BED annotations require PyRanges; install medicc2-full-fst[events] "
+                         "or run: python -m pip install 'pyranges>=0.1,<0.2'")
+        objects = Path(__file__).resolve().parents[1] / "objects"
+        for option, default in [("chromosomes_bed", "hg38_chromosome_arms.bed"),
+                                ("regions_bed", "Davoli_2013_TSG_OG_genes.bed")]:
+            value = getattr(args, option)
+            if value == "none":
+                continue
+            path = objects / default if value == "default" else Path(value).expanduser()
+            if not path.is_file():
+                parser.error(f"BED file does not exist: {path}")
+            setattr(args, option, str(path))
     columns = [s.strip() for s in args.input_allele_columns.split(",")]
     if len(columns) != 2 or len(set(columns)) != 2:
         parser.error("This reference CLI expects two distinct allele columns")
@@ -97,6 +124,7 @@ def main(argv=None):
         fastme=args.fastme,
         nni=args.nni_mode,
         topology_only=args.topology_only,
+        events=args.events,
         output_dir=out,
         allele_columns=columns,
         nni_max_iter=args.nni_max_topology
@@ -125,6 +153,15 @@ def main(argv=None):
         result.copy_numbers.to_csv(out / (prefix + "_final_cn_profiles.tsv"), sep="\t")
         with gzip.open(out / (prefix + "_profiles.json.gz"), "wt") as handle:
             json.dump(result.profiles, handle)
+    if result.events is not None:
+        result.events.to_csv(out / (prefix + "_copynumber_events_df.tsv"), sep="\t")
+    if annotate:
+        from medicc.event_reconstruction import overlap_events
+        overlaps = overlap_events(events_df=result.events.copy(), alleles=columns,
+                                  normal_name=args.normal_name,
+                                  chromosome_bed=args.chromosomes_bed,
+                                  regions_bed=args.regions_bed)
+        overlaps.to_csv(out / (prefix + "_events_overlap.tsv"), sep="\t")
     if result.nni_result:
         with (out / (prefix + "_nni_steps.tsv")).open("w") as handle:
             writer = csv.writer(handle, delimiter="\t")

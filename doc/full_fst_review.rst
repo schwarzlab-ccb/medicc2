@@ -215,3 +215,72 @@ medicc_readability_review_20261014 results folder. No datasets are bundled here.
 The capped ancestor outlier fallback is described in
 ``ancestral_outlier_optimization.rst``. It preserves the full prune-zero language
 and reuses exact chromosome splitting only after a large search begins.
+
+Optional event histories (``--events``)
+--------------------------------------
+
+The reference CLI accepts ``--events``; the Python equivalent is
+``reconstruct(..., events=True)``. Ancestors must be reconstructed first, so this
+cannot be combined with ``--topology-only``. Trees, ancestors, branch lengths,
+and their filenames are unchanged. The additional table uses the existing
+MEDICC filename ``<prefix>_copynumber_events_df.tsv``.
+
+Read ``medicc/full_fst/events.py`` after ``core.py``. The native pair scorer first
+chooses an optimal path through ``(A D)^k A``, for k = 0, 1, or 2. Its optional
+traceback returns the intermediate profiles after each stage. OpenFST's
+``shortestpath`` then decomposes each small endpoint-constrained stage into
+literal L_LOH and G transitions. Primitive states count active unit intervals;
+the caller checks that interpretation against every exported primitive arc.
+It opens/closes intervals when those counts rise/fall and inserts the global
+WGDs between stages. No legacy MEDICC event FST is loaded.
+
+Losses reduce CN by one, stopping at zero. Gains increase positive CN by one
+and leave zero unchanged. An interval can therefore continue through an
+already absent allele. Chromosome and allele separators stop intervals. WGD
+applies ``min(2*CN, 8)`` across both alleles and all chromosomes, costing one
+event. The caller expands shortened columns back to the original input bins.
+It verifies that replay reaches the child profile and that the number of unit
+events equals the exact directed branch score. A mismatch raises an error.
+
+The table retains the leading columns ``sample_id, chrom, start, end, allele,
+type, cn_child``. ``sample_id`` identifies the child; ``cn_child`` is the final
+child CN at the interval's first bin (zero for WGD). WGD rows use ``chr0`` and
+``both`` with the input's minimum start and maximum end. Extra fields are:
+
+* ``parent_id``: the branch's parent.
+* ``event_order``: one-based application order within the branch.
+* ``stage``: the number of preceding WGDs; a WGD closes its current stage.
+* ``cost``: one per row, including a genome-wide WGD.
+* ``genome_start, genome_end``: half-open indices in the encoded genome, or -1
+  for WGD. These make exact replay possible even when genomic intervals repeat
+  across alleles or chromosomes.
+
+This is one optimal explanation, not a claim that event order is uniquely
+identifiable. Ties prefer fewer WGDs, then one native/OpenFST shortest path.
+Each L_LOH event is a unit ``loss``, including losses reaching zero. Event
+calling is optional and adds traceback/decomposition time after reconstruction;
+score-only calls retain their existing search and memory behavior.
+
+BED annotations of capped events
+-------------------------------
+
+``--chromosomes-bed`` and ``--regions-bed`` require ``--events``. Each accepts a
+file path, ``none``, or ``default``. Defaults resolve to MEDICC's bundled hg38
+chromosome arms and Davoli gene list, respectively; hg19 chromosome arms are also
+bundled. These are reference annotations copied unchanged from MEDICC, not
+experiment datasets. No coordinate conversion is performed.
+
+The CLI passes the already-called capped event table to the existing
+``medicc.event_reconstruction.overlap_events`` function. This explicit table
+prevents its legacy event-reconstruction fallback from being used. PyRanges
+computes the union coverage of each named region, separately for a branch,
+allele, and event type. Regions are reported only above 90% coverage; a whole
+chromosome annotation replaces its separate arm annotations when appropriate.
+WGDs are appended individually, preserving repeated WGDs within/across branches.
+
+The output remains ``<prefix>_events_overlap.tsv`` with the existing columns:
+``branch, Chromosome, Event-Start, Event-End, name, FractionOverlaps, event,
+final_name``. This is a regional annotation summary, not a second event count:
+several unit events can contribute to one region, and one event can overlap
+several regions. Use the ordered ``_copynumber_events_df.tsv`` for replay and
+counts. All original tree, profile and event filenames remain unchanged.

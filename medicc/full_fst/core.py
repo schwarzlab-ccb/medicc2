@@ -35,6 +35,7 @@ class Result:
     copy_numbers: pd.DataFrame
     details: dict
     nni_result: dict | None = None
+    events: pd.DataFrame | None = None
 
 
 def encode(input_df, normal_name, allele_columns=None):
@@ -260,12 +261,15 @@ def reconstruct(
     nni_max_frontier=1,
     nni_stop_on_plateau=True,
     progress=None,
+    events=False,
 ):
     """Public reference-tool API. Input is the standard MEDICC copy-number dataframe.
 
     Returns a Result containing distances, rooted trees, profiles and diagnostics.
     No experiment manifest, truth profile or evaluation metric is needed.
     """
+    if events and topology_only:
+        raise ValueError("Event calling requires ancestor reconstruction")
     if nni and topology_only:
         raise ValueError("NNI requires ancestor reconstruction")
     workers = n_cores or 1
@@ -366,6 +370,16 @@ def reconstruct(
         else input_df.copy()
     )
     details["tree_length"] = sum(n.branch_length or 0 for n in tree.find_clades())
+    event_table = None
+    if events:
+        from .events import call_tree_events
+        event_table = call_tree_events(tree, profiles, coordinates, columns)
+        if len(event_table) != details["tree_length"]:
+            raise ValueError("Event count differs from the reconstructed tree score")
+        details.update(event_count=len(event_table),
+                       event_wgds=int((event_table["type"] == "wgd").sum()),
+                       event_model="capped full L_LOH; min(2*CN,8); up to two WGDs",
+                       event_history="one minimum-cost history; ties prefer fewer WGDs")
     return Result(
-        labels, distances, initial, tree, profiles, output_df, details, search
+        labels, distances, initial, tree, profiles, output_df, details, search, event_table
     )

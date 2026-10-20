@@ -22,7 +22,8 @@ struct Result {
 // const string& borrows the parent without copying it and forbids modification.
 // double* stats points to three caller-owned doubles. No ownership is transferred.
 // Result is returned by value; its std::string manages its own allocated buffer.
-static Result search(direct_nfa::Side &a, const string &parent, int upper, double *stats) {
+static Result search(direct_nfa::Side &a, const string &parent, int upper, double *stats,
+                     vector<uint64_t> *path = nullptr) {
     Result result;
     int offset = a.child->offset + a.wg;
     int cap = upper >= INF ? INF : upper - offset;
@@ -125,13 +126,18 @@ static Result search(direct_nfa::Side &a, const string &parent, int upper, doubl
     result.cost = offset + cap;
     result.word.resize(len);
     int s = winner;
+    // Event calling optionally retains the already chosen primitive states.
+    // Score-only and ancestor callers allocate no extra traceback storage.
+    if (path) path->resize(len + 1);
     for (int i = len - 1; i >= 0; i--) {
+        if (path) (*path)[i + 1] = nodes[s].key;
         int c = nodes[s].label;
         if (c < 0)
             throw runtime_error("missing direct traceback predecessor");
         result.word[i] = c == 9 ? 'X' : char('0' + c);
         s = nodes[s].prev;
     }
+    if (path) (*path)[0] = nodes[s].key;
     if (s != root)
         throw runtime_error("invalid direct traceback length");
     return result;

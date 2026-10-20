@@ -49,7 +49,7 @@ def main():
         if rel.parts[0] == 'build' or any(part.endswith('.egg-info') for part in rel.parts): continue
         if p.suffix == '.so' or ('build' in rel.parts and p.name == 'ancestral_parts.txt'):
             binaries[str(rel)] = digest(p)
-        elif 'build' not in rel.parts and p.suffix in {'.py', '.pyx', '.pxd', '.cpp', '.hpp', '.h', '.yaml', '.sh', '.sbatch', '.txt'}:
+        elif 'build' not in rel.parts and p.suffix in {'.py', '.pyx', '.pxd', '.cpp', '.hpp', '.h', '.yaml', '.sh', '.sbatch', '.txt', '.bed'}:
             code[str(rel)] = digest(p)
     (ROOT/'code_manifest.json').write_text(json.dumps(code, indent=2)+'\n')
     (ROOT/'build_manifest.json').write_text(json.dumps(binaries, indent=2)+'\n')

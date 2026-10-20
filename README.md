@@ -1,10 +1,14 @@
+> **Codex-generated experimental implementation.** This reference branch, including
+> the capped event caller and BED-annotation integration, contains code generated
+> by Codex. The checks documented below do not replace human code review.
+
 Experimental distance optimization: this branch restores the original
 short-chromosome-first policy. See [the review note](doc/pair_distance_outliers.rst)
 for its provenance, exactness argument and matrix validation.
 
 # Optimized capped-WGD pilot branch
 
-Branch `full-fst-lloh-wgd2-capped-x2-opt`, based on
+Current branch: `full-fst-lloh-wgd2-capped-x2`. The optimization work was based on
 `full-fst-lloh-wgd2-capped-x2` at `0c66cd9` (the capped model originated from
 `full-fst-lloh-wgd2` at `f050793`). Mandatory WGD maps `c -> min(2*c, 8)` for CN 0–8;
 X remains X. WGD costs one per genome, with at most two per directed edge.
@@ -248,3 +252,54 @@ recorded separately under
 `/home/cnie/scratch_folder/results_treebench_development/medicc_readability_review_20261014/`.
 The earlier benchmark reports above describe their preserved implementation
 snapshots; their source paths have not been retroactively rewritten.
+
+## Optional capped-model event calling
+
+Add `--events` to the reference CLI (or `events=True` to `reconstruct`) to call
+one minimum-cost event history for each reconstructed branch. This uses the
+same capped full L_LOH model, including up to two genome-wide WGDs; it does not
+load the legacy event-calling FST. Every history is replayed and its event count
+must equal the directed branch score. Tied histories prefer fewer WGDs.
+
+Existing output filenames stay unchanged. Events are written to MEDICC's usual
+`<prefix>_copynumber_events_df.tsv`, with the usual leading columns and additional
+order/stage fields. See `doc/full_fst_review.rst` for their meaning. Calling events
+adds work after reconstruction and does not change the tree or ancestor profiles.
+Run `python -B tests/check_events.py` for exhaustive short-genome and workflow checks.
+
+Event-caller validation (20 October 2026): 13,122 exhaustive two-bin histories
+matched the independent literal-FST oracle; 52,488 existing pair-score checks
+and API/NNI/CLI regressions passed. Saved 20- and 100-leaf lambda-5 trees produced
+173 and 972 replayable unit events, exactly matching their branch scores. The
+20-leaf full CLI also reproduced the saved profiles and branch lengths. Logs and
+benchmark event tables are outside the tool in
+`/home/cnie/scratch_folder/results_treebench_development/medicc_capped_events_20261020/`.
+
+### Annotating events with chromosome arms and genes
+
+With `--events`, add `--chromosomes-bed FILE` and/or `--regions-bed FILE`.
+Use `default` for the bundled hg38 chromosome arms or Davoli gene list; `none`
+(the default) disables that annotation. For example, from this checkout:
+
+```bash
+python medicc2 input.tsv output --events \
+  --chromosomes-bed medicc/objects/hg38_chromosome_arms.bed \
+  --regions-bed medicc/objects/Davoli_2013_TSG_OG_genes.bed
+```
+
+The three BED files in `medicc/objects` are unchanged copies from MEDICC:
+`hg19_chromosome_arms.bed`, `hg38_chromosome_arms.bed`, and
+`Davoli_2013_TSG_OG_genes.bed`. Choose files matching the input's genome build;
+the command does not convert coordinates. BED input requires four tab-separated
+columns: chromosome, start, end, and region name, without a header (`#` comments
+are allowed).
+
+This writes the usual `<prefix>_events_overlap.tsv` after calling capped-model
+events. It labels regions with strictly more than 90% coverage by gains or losses,
+separately for each branch and allele. It does not change reconstruction or the
+raw event table. WGDs remain separate rows, including two on the same branch.
+
+Annotations use MEDICC's existing PyRanges overlap code. Install the optional
+package extra (`pip install '.[events]'`) or, for an already built checkout,
+`python -m pip install 'pyranges>=0.1,<0.2'`. Event calling without BED annotations
+does not require PyRanges. Validate with `python -B tests/check_event_annotations.py`.

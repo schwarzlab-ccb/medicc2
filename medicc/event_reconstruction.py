@@ -397,8 +397,14 @@ def overlap_events(events_df=None, output_df=None, tree=None, overlap_threshold=
             regions.append(pr.PyRanges(io.read_bed_file(regions_bed)))
 
     # Add WGD
-    for ind, _ in events_df.loc[events_df['type'] == 'wgd'].iterrows():
-        all_events.loc[('all', '0', '0')] = ['WGD', 1, 1., 'WGD', ind[0]]
+    # Append every WGD, including two on one branch. Assigning the same genomic
+    # index repeatedly would overwrite earlier WGDs (also across branches).
+    wgd_rows = [('all', '0', '0', 'WGD', 1, 1., 'WGD', ind[0])
+                for ind in events_df.loc[events_df['type'] == 'wgd'].index]
+    if wgd_rows:
+        wgd_frame = pd.DataFrame(wgd_rows, columns=['Chromosome', 'Start', 'End',
+            'name', 'NumberOverlaps', 'FractionOverlaps', 'event', 'branch'])
+        all_events = pd.concat([all_events, wgd_frame.set_index(['Chromosome', 'Start', 'End'])])
 
     for cur_branch in events_df.index.get_level_values('sample_id').unique():
         for allele in alleles:

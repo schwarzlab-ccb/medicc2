@@ -230,3 +230,5 @@ extern "C" double am_pair_score(void*handle,const char*xx,const char*yy,int dire
         return factorized::score((AM*)handle,x,y,stat);
     }catch(exception&e){error=e.what();return -1;}
 }
+
+#include "event_trace.hpp"
