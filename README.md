@@ -40,8 +40,10 @@ bounds with `python scripts/generate_chromosome_bound.py`; generate the compact
 factor with `python scripts/generate_capped_ad.py --help`, then build as below.
 The independent OpenFST oracle uses `wgd_cap=True`; legacy factory calls keep
 their previous default. Pilot scripts, datasets and results remain outside this
-tool checkout. The inherited PDF explains the parent model and predates these
-optimizations; use the review notes for the current capped implementation.
+tool checkout. The [offline reading guide](doc/algorithm_reading_guide.rst) and
+[updated algorithm PDF](doc/full_fst_algorithms.pdf) explain the current capped
+implementation, including exact segmentation and optional event histories.
+The individual review notes retain detailed proofs and historical measurements.
 
 # MEDICC full L_LOH / two-WGD reference branch
 
@@ -126,13 +128,19 @@ with PairScorer() as scorer:
 
 ## Review entry points
 
-Read this README, then [the Python-first review guide](doc/full_fst_review.rst),
-then [the algorithm slides (PDF, 22 slides)](doc/full_fst_algorithms.pdf).
-The guide covers the module map, ownership rules and a C++ translation key;
-the slides explain the model, searches and division of work between Python,
-custom C++, OpenFST and Boost.Graph. Then start the code review at
+Read this README, then [the offline algorithm reading guide](doc/algorithm_reading_guide.rst)
+or its [PDF edition (24 pages)](doc/full_fst_algorithms.pdf). They explain the
+current capped model with checked examples, Python-style pseudocode, search
+bounds, all-tie messages, exact segmentation and event histories. Continue with
+[the Python-first review guide](doc/full_fst_review.rst) for ownership details
+and a C++ translation key. Then start the code review at
 [`reconstruct()` in medicc/full_fst/core.py](medicc/full_fst/core.py).
 For the command-line entry, follow `medicc2` into `medicc/full_fst/cli.py`.
+
+The PDF is generated from `doc/algorithm_reading_guide.rst`; rebuild it with
+`python scripts/build_algorithm_pdf.py` using Python and Matplotlib. Reading
+the saved guide/PDF requires no MEDICC installation or internet access. The
+Linux environment file is not a macOS installation recipe.
 
 
 - `medicc2` and `medicc/full_fst/cli.py`: general tool entry point.

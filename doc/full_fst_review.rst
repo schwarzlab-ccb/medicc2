@@ -6,8 +6,10 @@ Capped-WGD branch
 
 This experimental branch changes mandatory doubling to min(2*c, 8).
 See README.md for the model difference and scripts/generate_chromosome_bound.py
-for its regenerated admissible bounds. The inherited PDF describes the parent
-model; the ownership and algorithm structure still apply.
+for its regenerated admissible bounds. The updated ``full_fst_algorithms.pdf``
+and its editable source,
+``algorithm_reading_guide.rst``, describe the current capped model, its search
+optimizations, exact segmentation and optional event histories.
 
 Pair-search optimization
 ------------------------
@@ -17,8 +19,8 @@ history, then searches only for a cheaper one. This changes the search budget,
 not the optimal distance or WGD model. Start with ``chromosome_witness`` and
 ``greedy_witness`` in ``direct_pair/src/pairwise.cpp`` when reviewing this change.
 The `optimization note <pair_search_optimization.rst>`_ gives Python-style
-pseudocode, the correctness argument and measured results. The inherited PDF
-predates this optimization; read this note alongside its pair-search slides.
+pseudocode, the correctness argument and measured results. The updated PDF
+introduces this optimization; this note gives its detailed evidence.
 
 Ancestral-search optimization
 -----------------------------
@@ -31,7 +33,7 @@ for Python-style pseudocode, the offsets/weights accounting and benchmarks.
 A subsequent forward-edge filter avoids relaxations that Boost would reject.
 Read the `follow-up search note <search_relaxation_optimization.rst>`_ before
 reviewing that callback; the backward pass still regenerates all tied labels.
-The inherited PDF predates these capped-model search optimizations.
+The updated PDF covers these optimizations in its search chapters.
 
 Reducing the search explosion
 -----------------------------
@@ -41,7 +43,8 @@ native join. OpenFST reduces A followed by capped doubling to a smaller exact
 factor. ``ancestors/src/pattern_bound.hpp`` solves a small relaxed sibling
 problem to guide Boost A*. ``nfa_engine.hpp`` also indexes suffix transitions by
 observed child label. The downward resolver keeps the original primitive order
-to preserve historical tie choices. The inherited PDF predates these changes.
+to preserve historical tie choices. The updated PDF explains both the compact
+factor and the tie-order constraint.
 
 Start in Python
 ---------------
@@ -49,14 +52,16 @@ Start in Python
 This branch keeps MEDICC's Python package and workflow. The new backend is
 medicc.full_fst; compiled sources live under medicc/cext/full_fst, alongside the
 native-extension directory already used in medicc2-pre-pub.
-This folder is the full-fst-lloh-wgd2-capped-x2-opt branch worktree of medicc2. The original
+This folder is the full-fst-lloh-wgd2-capped-x2 branch worktree of medicc2. The original
 medicc2 working checkout and the medicc2-pre-pub checkout remain unchanged.
 
-The review route is README.md, this guide, the
-`algorithm slides (PDF, 22 slides) <full_fst_algorithms.pdf>`_, then the code.
-The slides illustrate the full model, lazy search, retention of all tied
-ancestors, and the OpenFST/Boost.Graph boundary using Python-style pseudocode
-and a worked example.
+The review route is README.md, the
+`offline reading guide <algorithm_reading_guide.rst>`_ or its
+`PDF edition (24 pages) <full_fst_algorithms.pdf>`_, this deeper guide, then the
+code. The reading guide illustrates the capped model, lazy search, retention of
+all tied ancestors, exact segmentation, event histories and the OpenFST/Boost.Graph
+boundary using Python-style pseudocode and checked examples. Rebuild its PDF
+with ``python scripts/build_algorithm_pdf.py`` (Python and Matplotlib only).
 
 Suggested code reading order, all paths relative to this tool folder:
 
