@@ -35,7 +35,7 @@ jobs:
           pip install -e .
 
       - name: Run FST unit tests
-        run: pytest tests/test_fsts.py -v
+        run: pytest medicc/test_fsts.py -v
 
   integration-tests:
     name: Integration tests
@@ -62,7 +62,7 @@ jobs:
 
       - name: Run integration tests (core)
         run: |
-          pytest tests/test_medicc.py -v \
+          pytest medicc/test_medicc.py -v \
             -k "not gundem and not ipynb" \
             --timeout=300
 
@@ -92,6 +92,6 @@ jobs:
 
       - name: Run Gundem et al. parametrized tests
         run: |
-          pytest tests/test_medicc.py -v \
+          pytest medicc/test_medicc.py -v \
             -k "gundem and not ipynb" \
             --timeout=600

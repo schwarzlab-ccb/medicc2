@@ -17,7 +17,7 @@ runs=(
 for p in PTX004 PTX005 PTX006 PTX007 PTX008 PTX009 PTX010 PTX011 PTX012 PTX013; do
   runs+=("g_$p|examples/gundem_et_al_2015/${p}_input_df.tsv $EV")
 done
-LEGACY=${LEGACY:-medicc2}          # becomes medicc2-legacy after Step 44
+LEGACY=${LEGACY:-medicc2}          # override only when comparing a preserved historical CLI
 if [ "$1" = diff ]; then
   diff -r -x '*.png' -x '*.pdf' -x '*.log' $OUT/old $OUT/new && echo "PASS: identical outputs"; exit
 fi
