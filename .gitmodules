@@ -1,0 +1,3 @@
+[submodule "fstlib"]
+	path = submodule-fstlib
+	url = https://github.com/ICCB-Cologne/fstlib.git

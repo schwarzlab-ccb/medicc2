@@ -1,0 +1,8 @@
+nsamples	6
+normal_name	diploid
+tree_length	9.0
+mean_branch_length	1.2857142857142858
+median_branch_length	1.0
+min_branch_length	1.0
+max_branch_length	2.0
+wgd_status	WGD on branch internal_4

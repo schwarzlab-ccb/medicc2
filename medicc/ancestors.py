@@ -1,6 +1,4 @@
 import logging
-from collections import defaultdict
-from joblib import Parallel, delayed
 
 import Bio
 import Bio.Phylo
@@ -11,309 +9,95 @@ import medicc
 
 logger = logging.getLogger(__name__)
 
-def _intersect_task(left_fsa, right_fsa, fst, prune_weight=None, detmin_before_intersect=False, detmin_after_intersect=True):
-    """Worker function for parallel intersection (up-the-tree)"""
-    return intersect_clades_detmin(
-        left_fsa, right_fsa, fst,
-        prune_weight=prune_weight,
-        detmin_before_intersect=detmin_before_intersect,
-        detmin_after_intersect=detmin_after_intersect,
-    )
+def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0, n_cores=None):
+    """Reconstructs the ancestral profiles of all internal nodes of the tree.
 
-def _align_task(parent_fsa, child_fsa, fst):
-    """Worker function for parallel alignment (down-the-tree)"""
-    sp = fstlib.align(fst, parent_fsa, child_fsa)
-    return fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
-
-def _group_nodes_by_depth(clade_list, normal_name):
+    For an fstlib FST samples_dict holds FSAs and so does the result. For the native model
+    (fst is a medicc.native.ModelConfig) samples_dict holds copy-number strings, the result
+    holds strings, prune_weight must be 0 and n_cores threads are used.
     """
-    Group internal nodes by depth in the tree
-
-    Given a preorder clade_list (excluding normal), assigns each node a depth from the root and returns a dict mapping
-    depth -> list of nodes at that depth. Only internal nodes are included.
-
-    Used for parallel ancestral reconstruction, and parallelism is limited by tree shape -- a highly unbalanced (caterpillar)
-    tree has at most 1 node per depth level, yielding no parallelism. Balanced binary trees benefit most.
-    """
-
-    depth_map = {id(clade_list[0]): 0}
-    levels = defaultdict(list)
-
-    # breadth first search of the tree.
-    for node in clade_list:
-        node_depth = depth_map.get(id(node), 0) # default 0
-        if len(node.clades) != 0:
-            levels[node_depth].append(node)
-            for child in node.clades:
-                if child.name != normal_name:
-                    depth_map[id(child)] = node_depth + 1
-    return levels
-
-
-
-def reconstruct_ancestors(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name, prune_weight=0, n_cores=None, upper_cache=False):
-    '''
-    Reconstruct ancestors: up-pass intersects sibling FSAs under upper_pass_fst,
-    then a down-pass aligns root-to-normal and parent-to-child under lower_pass_fst.
-    Does not mutate `tree` or `samples_dict`.
-
-    n_cores: None or 1 runs sequentially; any other value parallelizes each
-    tree-depth level with joblib. Benefit depends on tree shape — a caterpillar
-    tree has ~1 node per depth and gains nothing.
-
-    upper_cache: when True, also returns uppass_cache, the pre-down-pass
-    up-pass (intersection-only) FSA for each internal node — kept for callers
-    that later want to reuse unchanged subtrees instead of recomputing them.
-
-    Returns fsa_dict, or (fsa_dict, uppass_cache) if upper_cache=True.
-    '''
-
-    from .full_fst.ancestors import FULL_TWO, reconstruct
-    if upper_pass_fst is FULL_TWO:
-        return reconstruct(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name,
-                           prune_weight=prune_weight, n_cores=n_cores, upper_cache=upper_cache)
 
     if len(samples_dict) == 2:
-        if not upper_cache:
-            return samples_dict
-        else:
-            return samples_dict, {}
+        return samples_dict
+
+    if isinstance(fst, medicc.native.ModelConfig):
+        return _reconstruct_ancestors_native(tree, samples_dict, fst, normal_name, n_cores)
 
     fsa_dict = samples_dict.copy()
     tree = Bio.Phylo.BaseTree.copy.deepcopy(tree)
 
     clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
-
-    if n_cores is None or n_cores == 1:
-        # Sequential pipeline
-        logger.info("Ancestor reconstruction: Up the tree")
-        # up the tree (leaf to root)
-        for node in reversed(clade_list):
-            if len(node.clades) != 0:
-                children = [item for item in node.clades if item.name != normal_name]
-                left_name = children[0].name
-                right_name = children[1].name
-                logger.debug(f"Clade: {node.name}, left: {left_name}, right: {right_name}")
-
-                ## project
-                intersection = intersect_clades_detmin(fsa_dict[left_name], fsa_dict[right_name], upper_pass_fst,
-                                                       prune_weight=prune_weight, detmin_before_intersect=False, detmin_after_intersect=True)
-                fsa_dict[node.name] = intersection
-
-        if upper_cache:
-            uppass_cache = {node.name: fsa_dict[node.name]
-                            for node in clade_list if len(node.clades) != 0}
-
-        logger.debug("Ancestor reconstruction for root")
-        # root node is calculated separately w.r.t. normal node
-        root_name = clade_list[0].name
-        sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
-        fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
-
-        logger.info("Ancestor reconstruction: Down the tree")
-        # down the tree (root to leaf)
-        for node in clade_list:
-            if len(node.clades) != 0:
-                children = [q for q in node.clades if len(q.clades) != 0]
-                logger.debug(f"Clade: {node.name}, internal children: {children}")
-                for child in children:
-                    sp = fstlib.align(lower_pass_fst, fsa_dict[node.name], fsa_dict[child.name])
-                    fsa_dict[child.name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
-    else:
-        # parallel pipeline
-        logger.info(f"Ancestor reconstruction using {n_cores} worker processes: Up the tree")
-        levels = _group_nodes_by_depth(clade_list, normal_name)
-        for depth in sorted(levels.keys(), reverse=True):
-            nodes_at_depth = [n for n in levels[depth] if len(n.clades) != 0]
-            if not nodes_at_depth:
-                continue
-
-
-            if len(nodes_at_depth) > 1: # if one node, you pay parallelization overhead for nothing
-                results = Parallel(n_jobs=n_cores)(
-                    delayed(_intersect_task)(
-                        fsa_dict[[c for c in node.clades if c.name != normal_name][0].name],
-                        fsa_dict[[c for c in node.clades if c.name != normal_name][1].name],
-                        upper_pass_fst, prune_weight
-                    ) for node in nodes_at_depth
-                )
-                for node, result in zip(nodes_at_depth, results):
-                    logger.debug(f"Clade: {node.name} (parallel)")
-                    fsa_dict[node.name] = result
-            else:
-                for node in nodes_at_depth:
-                    children = [item for item in node.clades if item.name != normal_name]
-                    left_name = children[0].name
-                    right_name = children[1].name
-                    logger.debug(f"Clade: {node.name}, left: {left_name}, right: {right_name}")
-                    fsa_dict[node.name] = _intersect_task(fsa_dict[left_name], fsa_dict[right_name], upper_pass_fst, prune_weight)
-
-        if upper_cache:
-            uppass_cache = {node.name: fsa_dict[node.name]
-                            for node in clade_list if len(node.clades) != 0}
-
-        logger.debug("Ancestor reconstruction for root")
-        # root node is calculated separately w.r.t. normal node
-        root_name = clade_list[0].name
-        sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
-        fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
-
-        logger.debug(f"Ancestor reconstruction using {n_cores} worker processes: Down the tree")
-        # Down the tree (root to leaf), level by level
-        for depth in sorted(levels.keys()):
-            pairs = []
-            for node in levels[depth]:
-                if len(node.clades) != 0:
-                    for child in node.clades:
-                        if len(child.clades) != 0:
-                            pairs.append((node.name, child.name))
-
-            if not pairs:
-                continue
-
-            if len(pairs) > 1:
-                results = Parallel(n_jobs=n_cores)(
-                    delayed(_align_task)(fsa_dict[pname], fsa_dict[cname], lower_pass_fst)
-                    for pname, cname in pairs
-                )
-                for (_,cname), result in zip(pairs, results):
-                    logger.debug(f"Aligned child: {cname} (parallel)")
-                    fsa_dict[cname] = result
-            else:
-                for pname, cname in pairs:
-                    logger.debug(f"Clade: {pname}, internal child: {cname}")
-                    fsa_dict[cname] = _align_task(fsa_dict[pname], fsa_dict[cname], lower_pass_fst)
-
-    # check if ancestors were correctly reconstructed
-    validate_ancestor_lengths(fsa_dict, normal_name)
-    if not upper_cache:
-        return fsa_dict
-    else:
-        return fsa_dict, uppass_cache
-
-def reconstruct_ancestors_incremental(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name, prune_weight,
-                                      old_uppass_cache, nni_move, shared_cache_readonly=False,
-                                      validate_result=True, log_progress=True):
-    """
-    incremental reconstruction of ancestors after a single NNI move.
-    Only the affected dirty nodes' candidates (up the tree) fsas are reconstructed.
-    """
-
-    from .full_fst.ancestors import FULL_TWO, reconstruct
-    if upper_pass_fst is FULL_TWO:
-        return reconstruct(tree, samples_dict, upper_pass_fst, lower_pass_fst, normal_name,
-                           prune_weight=prune_weight, old_uppass_cache=old_uppass_cache,
-                           nni_move=nni_move, validate_result=validate_result)
-    def __build_parent_of_and_clade_loop_up_table(tree, normal_name):
-        parent_of = {}
-        clade_look_up_table = {}
-        for clade in tree.find_clades(order="preorder"):
-            clade_look_up_table[clade.name] = clade
-            for child in clade.clades:
-                if child.name != normal_name:
-                    parent_of[child.name] = clade.name
-        return parent_of, clade_look_up_table
-
-    def __dirty_node_list(parent_of, v_name, normal_name, clade_look_up_table):
-        dirty = []
-        node_name = v_name
-        while node_name is not None and node_name != normal_name:
-            dirty.append(clade_look_up_table[node_name])
-            node_name = parent_of[node_name]
-        return dirty
-
-    # Get the dirty nodes (from v_name to root)
-    parent_of, clade_look_up_table = __build_parent_of_and_clade_loop_up_table(tree, normal_name)
-    dirty_nodes_l = __dirty_node_list(parent_of, nni_move.v_name, normal_name, clade_look_up_table)
-
-    fsa_dict = old_uppass_cache | samples_dict
-    clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
-
-    if log_progress:
-        logger.debug("Incremental ancestral reconstruction: Up the tree for only the dirty nodes")
-    for node in dirty_nodes_l:
-        children = [item for item in node.clades if item.name != normal_name]
-        left_name = children[0].name
-        right_name = children[1].name
-        if log_progress:
+    logger.info("Ancestor reconstruction: Up the tree")
+    # up the tree (leaf to root)
+    for node in reversed(clade_list): 
+        if len(node.clades) != 0:
+            children = [item for item in node.clades if item.name != normal_name]
+            left_name = children[0].name
+            right_name = children[1].name
             logger.debug(f"Clade: {node.name}, left: {left_name}, right: {right_name}")
 
-        ## project
-        intersection = intersect_clades_detmin(fsa_dict[left_name], fsa_dict[right_name], upper_pass_fst,
-                                               prune_weight=prune_weight, detmin_before_intersect=False,
-                                               detmin_after_intersect=True,
-                                               inputs_presorted=shared_cache_readonly)
-        fsa_dict[node.name] = intersection
+            ## project
+            intersection = intersect_clades_detmin(fsa_dict[left_name], fsa_dict[right_name], fst, 
+                                                   prune_weight=prune_weight, detmin_before_intersect=False, detmin_after_intersect=True)
+            fsa_dict[node.name] = intersection
 
-    new_uppass_cache = {node.name: fsa_dict[node.name] for node in clade_list if len(node.clades) != 0}
-
-    if log_progress:
-        logger.debug("Incremental ancestral reconstruction for root")
+    logger.debug("Ancestor reconstruction for root")
     # root node is calculated separately w.r.t. normal node
-    root_name = clade_list[0].name
-    sp = fstlib.align(lower_pass_fst, fsa_dict[normal_name], fsa_dict[root_name])
+    root_name = clade_list[0].name 
+    sp = fstlib.align(fst, fsa_dict[normal_name], fsa_dict[root_name])
     fsa_dict[root_name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
-    if log_progress:
-        logger.info("Incremental ancestral reconstruction: Down the tree")
+    logger.info("Ancestor reconstruction: Down the tree")
     # down the tree (root to leaf)
     for node in clade_list:
         if len(node.clades) != 0:
             children = [q for q in node.clades if len(q.clades) != 0]
-            if log_progress:
-                logger.debug(f"Clade: {node.name}, internal children: {children}")
+            logger.debug(f"Clade: {node.name}, internal children: {children}")
             for child in children:
-                sp = fstlib.align(lower_pass_fst, fsa_dict[node.name], fsa_dict[child.name])
+                sp = fstlib.align(fst, fsa_dict[node.name], fsa_dict[child.name])
                 fsa_dict[child.name] = fstlib.arcmap(sp.copy().project('output'), map_type='rmweight')
 
     # check if ancestors were correctly reconstructed
-    if validate_result:
-        validate_ancestor_lengths(fsa_dict, normal_name)
-    return fsa_dict, new_uppass_cache
+    sample_lengths = {sample: len(medicc.tools.fsa_to_string(fsa_dict[sample])) for sample, fsa in fsa_dict.items()}
+    normal_length = sample_lengths[normal_name]
+
+    if np.any([x != normal_length for x in sample_lengths.values()]):
+        raise MEDICCAncestorReconstructionError("Some ancestors could not be reconstructed. These are:\n"
+                                                "{}".format('\n'.join([sample for sample, length in sample_lengths.items() if length != normal_length])) + \
+                                                "\nCheck whether your normal sample contains segments with copy number zero")
+
+    return fsa_dict
 
 
+def _reconstruct_ancestors_native(tree, cn_str_dict, model_config, normal_name, n_cores=None):
+    """Native up and down pass on a tree rooted at the most recent common ancestor (whose
+    children are the normal and two subtrees)."""
+    clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
+    children = {node.name: [child.name for child in node.clades if child.name != normal_name]
+                for node in clade_list if len(node.clades) != 0}
+    leaves = {name: cn_str for name, cn_str in cn_str_dict.items() if name != normal_name}
+    profiles = medicc.native.reconstruct(children, leaves, clade_list[0].name,
+                                         cn_str_dict[normal_name], model_config, n_cores)
+    profiles[normal_name] = cn_str_dict[normal_name]
+    return profiles
 
-def intersect_clades_detmin(left, right, fst, prune_weight=None, detmin_before_intersect=True,
-                            detmin_after_intersect=True, inputs_presorted=False):
-    L = fstlib.compose(fst, left if inputs_presorted else left.arcsort('ilabel')).project('input')
-    R = fstlib.compose(fst, right if inputs_presorted else right.arcsort('ilabel')).project('input')
+
+def intersect_clades_detmin(left, right, fst, prune_weight=None, detmin_before_intersect=True, detmin_after_intersect=True):
+    L = fstlib.compose(fst, left.arcsort('ilabel')).project('input')
+    R = fstlib.compose(fst, right.arcsort('ilabel')).project('input')
     if detmin_before_intersect:
         L = fstlib.determinize(L).minimize()
         R = fstlib.determinize(R).minimize()
+    intersection = fstlib.intersect(L.arcsort('olabel'), R)
+    # For prune_weight=0, deletes all paths but the shortest one
     if prune_weight is not None:
-        # The MEDICC upper-pass operands are epsilon-free, acyclic acceptors.
-        # Sorting both sides lets the native fused operation traverse their
-        # lazy product without ever materializing its enormous raw arc set.
-        pruned = medicc.fst_utils.intersect_prune_acyclic(
-            L.arcsort('ilabel'), R.arcsort('ilabel'), weight=prune_weight)
+        pruned = fstlib.prune(intersection, weight=prune_weight)
     else:
-        pruned = fstlib.intersect(L.arcsort('olabel'), R)
+        pruned = intersection
     if detmin_after_intersect:
         pruned = fstlib.determinize(pruned).minimize()
-    if inputs_presorted:
-        pruned.arcsort('ilabel')
     return pruned
 
 
 class MEDICCAncestorReconstructionError(Exception):
     pass
-
-
-def validate_ancestor_lengths(fsa_dict, normal_name):
-    """Validate resolved ancestor strings once for a selected result."""
-
-    from .full_fst.ancestors import Genome, validate_profiles
-    if all(isinstance(value, Genome) for value in fsa_dict.values()):
-        return validate_profiles(fsa_dict, normal_name)
-    sample_lengths = {
-        sample: len(medicc.tools.fsa_to_string(fsa))
-        for sample, fsa in fsa_dict.items()}
-    normal_length = sample_lengths[normal_name]
-    invalid = [
-        sample for sample, length in sample_lengths.items()
-        if length != normal_length]
-    if invalid:
-        raise MEDICCAncestorReconstructionError(
-            "Some ancestors could not be reconstructed. These are:\n"
-            + "\n".join(invalid)
-            + "\nCheck whether your normal sample contains segments with copy number zero")

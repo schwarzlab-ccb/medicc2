@@ -1,0 +1,16 @@
+name: medicc_env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - openfst=1.8.4
+  - numpy=2.5.1
+  - pyyaml>=5.4.1
+  - pandas=3.0.3
+  - joblib>=1.0.1
+  - biopython>=1.84
+  - scipy>=1.13
+  - matplotlib>=3.8.4
+  - cython==3.1.2
+  - python=3.12
+  - fastme>=2.1.6

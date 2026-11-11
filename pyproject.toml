@@ -1,3 +1,49 @@
 [build-system]
-requires = ["setuptools", "wheel", "Cython>=3"]
+requires = ["setuptools>=77", "wheel", "cython>=3.0"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "medicc2"
+dynamic = ["version"]
+description = "Whole-genome doubling-aware copy number phylogenies for cancer evolution"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Tom L Kaufmann", email = "tkau93@gmail.com" },
+    { name = "Marina Petkovic", email = "marina.55kovic@gmail.com" },
+    { name = "Chenxi Nie" },
+    { name = "Roland F Schwarz", email = "roland.f.schwarz@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "pyyaml>=5.4.1",
+    "biopython>=1.84",
+    "scipy>=1.13",
+    "matplotlib>=3.8.4",
+]
+
+[project.optional-dependencies]
+parallelization = ["joblib>=1.0.1"]
+events = ["pyranges>=0.1"]
+
+[project.urls]
+Homepage = "https://bitbucket.org/schwarzlab/medicc2"
+
+[tool.setuptools]
+packages = ["medicc", "medicc.native", "fstlib", "fstlib.cext"]
+script-files = ["medicc2"]
+
+[tool.setuptools.dynamic]
+version = { attr = "medicc._version.__version__" }
+
+[tool.setuptools.package-data]
+medicc = ["objects/*.fst", "objects/*.bed", "objects/*.txt", "logging_conf.yaml"]
+"medicc.native" = ["src/*.hpp", "src/*.cpp"]
+fstlib = ["logging_conf.yaml", "cext/*.pxd", "cext/*.pyx", "cext/*.h"]

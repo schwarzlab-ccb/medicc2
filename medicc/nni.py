@@ -1,158 +1,138 @@
-"""
-NNI (nearest neighbor interchange) move for MEDICC2
+"""Nearest-neighbour interchange (NNI) refinement of a tree topology.
 
-The NNI move at internal edge (u, v), where u is the parent of v and v is itself
-internal - picks the "uncle" A (the other child of u) and swaps it with one of v's
-children (B or C). Two distinct moves per qualifying edge.
-"""
+An NNI move at an internal edge (u, v), where v is an internal child of u, swaps the
+other child of u with one of the two children of v. Every such edge below the root
+gives two moves. The normal sample stays the outgroup and no internal node is created,
+renamed or removed.
 
+The search is independent of the copy-number model: it takes a function that scores
+a tree (the total tree length after ancestor reconstruction) and runs a steepest
+descent over NNI neighbours.
+"""
 import copy
+import logging
 
-class _NNIMove:
-    """Identifies one NNI move by the names of the four involved nodes"""
-    __slots__ = ("u_name", "v_name", "A_name", "swap_target_name")
+logger = logging.getLogger(__name__)
 
-    def __init__(self, u_name, v_name, A_name, swap_target_name):
-        self.u_name = u_name
-        self.v_name = v_name
-        self.A_name = A_name
-        self.swap_target_name = swap_target_name
 
-def _is_root(clade, root):
-    return clade is root
+def nni_neighbours(tree, normal_name='diploid'):
+    """Generate all NNI neighbours of a rooted binary tree.
 
-def _apply_nni_swap(tree, u_name, v_name, A_name, swap_target_name):
+    For every internal node u with exactly two children other than the normal, and every
+    internal child v of u, the other child of u is swapped with each child of v in turn.
+    Moves are generated in preorder of u, then in child order. The input tree is not changed.
+
+    Parameters
+    ----------
+    tree : Bio.Phylo tree
+        Rooted tree, e.g. the tree used for ancestor reconstruction, whose root holds the
+        normal and the two subtrees.
+    normal_name : str
+        Name of the normal sample, which is never moved.
+
+    Yields
+    ------
+    Bio.Phylo tree
+        A modified deep copy of ``tree`` for each move.
     """
-    Deepcopy 'tree' and apply an NNI swap at edge (u, v), exchanging A and swap_target.
-
-    Pre: u is parent of v; A is u's other child; swap_target is one of v's children.
-    Post: u's children are {swap_target, v}; v's children are {A, the_other_v_child}.
-
-    Returns the new tree. No new internal nodes are created; all names preserved.
-    """
-
-    new_tree = copy.deepcopy(tree)
-
-    # Locate u, v, A, swap_target by name in the copy
-    name_to_clade = {c.name: c for c in new_tree.find_clades() if c.name is not None}
-    u = name_to_clade[u_name]
-    v = name_to_clade[v_name]
-    A = name_to_clade[A_name]
-    swap_target = name_to_clade[swap_target_name]
-
-    # Rewire: remove A from u, append swap_target to u
-    u.clades = [c for c in u.clades if c is not A]
-    u.clades.append(swap_target)
-
-    # Rewire: remove swap_target from v, append A to v
-    v.clades = [c for c in v.clades if c is not swap_target]
-    v.clades.append(A)
-
-    return new_tree
-
-def _enumerate_moves(tree):
-    """
-    Return a list of _NNIMove descriptors for all valid NNI moves on `tree`.
-    """
-
-    root = tree.root
-    root_children = set(root.clades)
-    moves = []
-
-    # Depth first traversal
-    for u in tree.find_clades():
-        if _is_root(u, root):
+    for u_index, u in enumerate(tree.find_clades()):
+        children = [i for i, child in enumerate(u.clades) if child.name != normal_name]
+        if len(children) != 2:
             continue
-        if len(u.clades) < 2:
-            continue
-        for v in u.clades:
+        for v_index in children:
+            v = u.clades[v_index]
             if len(v.clades) < 2:
                 continue
-            siblings_of_v = [c for c in u.clades if c is not v]
-            A = siblings_of_v[0]
-            for swap_target in list(v.clades):
-                moves.append(_NNIMove(u.name, v.name, A.name, swap_target.name))
-    return moves
+            other_index = children[1] if v_index == children[0] else children[0]
+            for target_index in range(len(v.clades)):
+                neighbour = copy.deepcopy(tree)
+                new_u = list(neighbour.find_clades())[u_index]
+                new_v = new_u.clades[v_index]
+                new_u.clades[other_index], new_v.clades[target_index] = (
+                    new_v.clades[target_index], new_u.clades[other_index])
+                yield neighbour
 
 
-def nni_neighbors(tree):
-    """Yield (new_tree, _NNIMove) for each valid NNI move on 'tree'."""
+def topology_key(tree):
+    """Hashable key of the rooted topology, independent of internal node names and child order."""
+    def key(clade):
+        if clade.is_terminal():
+            return (0, clade.name)
+        return (1, tuple(sorted(key(child) for child in clade.clades)))
 
-    for move in _enumerate_moves(tree):
-        new_tree = _apply_nni_swap(
-            tree=tree,
-            u_name=move.u_name,
-            v_name=move.v_name,
-            A_name=move.A_name,
-            swap_target_name=move.swap_target_name
-        )
-        yield new_tree, move
+    return key(tree.root)
 
-def _eval_nni_neighbor(tree, move, old_uppass_cache, samples_dict, upper_pass_fst, lower_pass_fst,
-                       normal_name, prune_weight, visited_solutions, step=0):
+
+def nni_search(tree, evaluate, max_iter=None, normal_name='diploid'):
+    """Steepest-descent NNI search that minimises the score of a tree.
+
+    Each sweep evaluates every NNI neighbour (see ``nni_neighbours``) of the current tree
+    whose topology was not evaluated before and moves to the best neighbour if it is
+    strictly better than the current tree. Ties are broken by enumeration order, so the
+    result is deterministic. The search stops at a local optimum or when ``max_iter``
+    candidates have been evaluated; the best candidate found until then is kept.
+
+    Parameters
+    ----------
+    tree : Bio.Phylo tree
+        Start tree (not changed).
+    evaluate : callable
+        Function tree -> score (float), e.g. the total tree length after ancestor
+        reconstruction. It must not change the tree it gets.
+    max_iter : int, optional
+        Maximum number of evaluated candidate topologies (the start tree is not counted).
+        Unlimited by default.
+    normal_name : str
+        Name of the normal sample.
+
+    Returns
+    -------
+    best_tree : Bio.Phylo tree
+        The tree with the lowest score found.
+    trace : list of dict
+        One entry per accepted step with the keys ``step`` (0 is the start tree),
+        ``tree_length`` (score) and ``evaluated`` (candidates evaluated so far).
+
+    Raises
+    ------
+    ValueError
+        If ``max_iter`` is smaller than 1.
     """
-    Apply one NNI move and evaluate it. Runs inside a worker thread.
+    if max_iter is not None and max_iter < 1:
+        raise ValueError("max_iter must be at least 1.")
 
-    Return resolved down-pass ancestors with the topology and score. All
-    threads share the same immutable pre-down-pass upper cache. Ancestors are
-    retained for selected candidates; the upper cache is reconstructed only
-    when a selected tree is expanded.
-    """
-    # Lazy import
-    import medicc.ancestors
-    import medicc.tools
-    import medicc.core
+    best_tree = tree
+    best_score = evaluate(tree)
+    seen = {topology_key(tree)}
+    evaluated = 0
+    limit_reached = False
+    trace = [dict(step=0, tree_length=best_score, evaluated=0)]
+    logger.info(f"NNI start: tree length {best_score}.")
 
-    new_tree = _apply_nni_swap(tree, move.u_name, move.v_name, move.A_name, move.swap_target_name)
-    new_tree_hash = medicc.tree_hash.get_topology_hash(new_tree)
-    if new_tree_hash in visited_solutions:
-        score = visited_solutions[new_tree_hash]
-        return new_tree, None, None, score, step, move
+    while not limit_reached:
+        winner, winner_score = None, best_score
+        for neighbour in nni_neighbours(best_tree, normal_name):
+            key = topology_key(neighbour)
+            if key in seen:
+                continue
+            if max_iter is not None and evaluated >= max_iter:
+                limit_reached = True
+                break
+            seen.add(key)
+            score = evaluate(neighbour)
+            evaluated += 1
+            logger.debug(f"NNI candidate {evaluated}: tree length {score}")
+            if score < winner_score:
+                winner, winner_score = neighbour, score
+        if winner is None:
+            break
+        best_tree, best_score = winner, winner_score
+        trace.append(dict(step=len(trace), tree_length=best_score, evaluated=evaluated))
+        logger.info(f"NNI step {len(trace) - 1}: tree length {best_score} "
+                    f"({evaluated} candidates evaluated).")
+
+    if limit_reached:
+        logger.info(f"NNI stopped at the limit of {max_iter} evaluated candidates.")
     else:
-        ancestors, new_uppass_cache = medicc.ancestors.reconstruct_ancestors_incremental(
-            tree=new_tree,
-            samples_dict=samples_dict,
-            upper_pass_fst=upper_pass_fst,
-            lower_pass_fst=lower_pass_fst,
-            normal_name=normal_name,
-            prune_weight=prune_weight,
-            old_uppass_cache=old_uppass_cache,
-            nni_move=move,
-            shared_cache_readonly=True,
-            validate_result=False,
-            log_progress=False,
-        )
-        medicc.core.update_branch_lengths(
-            new_tree, lower_pass_fst, ancestors, normal_name, log_progress=False)
-        score = medicc.tools.sum_of_branch_length(new_tree)
-        return new_tree, ancestors, None, score, step, move
-
-
-def evaluate_nni_neighbors_parallel(tree, old_uppass_cache, samples_dict,
-                                    normal_name, prune_weight, n_cores, upper_pass_fst, lower_pass_fst, visited_solutions,
-                                    step_start=0):
-    """
-    Evaluate all NNI neighbors using threads over one shared immutable cache.
-
-    Returns an ordered generator containing resolved ancestors but no
-    upper-pass cache. The shared cache is never serialized or copied; a new
-    cache is reconstructed only for a topology that becomes a frontier tree.
-    """
-
-    from joblib import Parallel, delayed
-
-    moves = _enumerate_moves(tree)
-    visited_snapshot = visited_solutions.copy()
-
-    results = Parallel(
-        n_jobs=n_cores, return_as="generator", prefer="threads",
-        require="sharedmem")(
-        delayed(_eval_nni_neighbor)(
-            tree, move, old_uppass_cache, samples_dict, upper_pass_fst, lower_pass_fst,
-            normal_name, prune_weight, visited_snapshot, step=step_start+i,
-        )
-        for i, move in enumerate(moves)
-    )
-    return results
-
-
+        logger.info(f"NNI reached a local optimum after {evaluated} evaluated candidates.")
+    return best_tree, trace

@@ -61,7 +61,7 @@ def _mutate(cnstr, event, start, end, maxcn, mincn, ignore_chr_boundaries=False,
             if newcn < mincn:
                 newcn = mincn
         else:
-            logger.error(f'unknown event type: {event}. Expected one of gain or loss.')
+            logger.error('unknown event')
             newcn = oldcn
         cnstr[i] = tools.int2hex(newcn)
 
@@ -154,18 +154,17 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
         edge.columns = ['a','b']
 
 
-        reordered = pd.DataFrame(columns=['a','b'])
         root = edge.index[-2]
-        parent = [edge.iloc[root][0]] #stack
-        child = edge.iloc[root][1]
-        reordered = pd.concat([reordered, edge.iloc[[root]]])
+        parent = [edge.iloc[root]['a']] #stack
+        child = edge.iloc[root]['b']
+        reordered = edge.iloc[[root]]
         edge.drop(edge.index[root], inplace = True)
         while  not edge.empty:
-            if (set (edge.a.isin([parent[-1]]))) == {False}:#checks if both occurrences took place, and value can be popped out of stack
+            if (set (edge.a.isin([parent[-1]]))) == {False}:#checks if both occurences took place, and value can be popped out of stack
                 del parent[-1]
             if child <= n :
                 root = edge.a.isin([parent[-1]]).idxmax()
-                child = int(edge.iloc[edge.index==root]['b'])
+                child = int(edge.loc[root, 'b'])
                 reordered = pd.concat([reordered, edge.iloc[edge.index==root]])
                 edge.drop(root, inplace = True)
                 if child < n:
@@ -174,7 +173,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
             else:
                 parent.append(child)
                 root =  edge.a.isin([child]).idxmax()
-                child = int(edge.iloc[edge.index==root]['b'])
+                child = int(edge.loc[root, 'b'])
                 reordered = pd.concat([reordered, edge.iloc[edge.index==root]])
                 edge.drop(root, inplace = True)
                 if child < n:
@@ -204,7 +203,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
 
 
 def _edgelist_to_tree(el, add_normal=True, normal_name='diploid'):
-    clades = {name:Bio.Phylo.PhyloXML.Clade(name=name) for name in el[['name_a','name_b']].stack(future_stack=True).unique()}
+    clades = {name:Bio.Phylo.PhyloXML.Clade(name=name) for name in el[['name_a','name_b']].stack().unique()} 
     if add_normal:
         clades[normal_name] = Bio.Phylo.PhyloXML.Clade(name=normal_name, branch_length=1)
         clades['mrca'].clades.append(clades[normal_name])

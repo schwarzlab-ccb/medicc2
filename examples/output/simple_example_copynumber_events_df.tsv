@@ -1,0 +1,8 @@
+sample_id	chrom	start	end	allele	type	cn_child
+internal_4	chr1	1	3	cn_b	loh	0
+internal_1	chr1	2	3	cn_a	loh	0
+internal_1	chr1	3	4	cn_b	loh	0
+taxon_3	chr1	0	5	cn_a	gain	2
+taxon_3	chr1	0	5	cn_b	gain	2
+taxon_5	chr1	0	1	cn_a	gain	2
+taxon_5	chr1	3	5	cn_a	gain	2

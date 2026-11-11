@@ -6,7 +6,7 @@ import pandas as pd
 from Bio.Phylo.Consensus import _BitString, get_support
 
 from medicc import io, tools
-from medicc.core import main
+from medicc.core import MEDICCError, main, select_tree_method
 
 # tqdm can be used for progress bars
 try: 
@@ -17,6 +17,8 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+MIN_BOOTSTRAP_NR = 5
+
 def chr_wise_bootstrap_df(input_df):
     """Creates a bootstrap dataframe based on the original data. From the N original chromosomes in
     the dataset we draw N chromosomes *with* replacement to create a new bootstrap dataframe.
@@ -25,12 +27,10 @@ def chr_wise_bootstrap_df(input_df):
     chroms = input_df.index.get_level_values('chrom').unique()
     cur_chroms = np.random.choice(chroms, len(chroms), replace=True)
 
-    bootstrap_df = pd.DataFrame(columns=input_df.reset_index().columns)
-
-    for i, cur_chrom in enumerate(cur_chroms):
-        cur_data = input_df.reset_index().loc[(input_df.reset_index()['chrom'] == cur_chrom).values]
-        cur_data['chrom'] = 'chr{}'.format(i+1)
-        bootstrap_df = pd.concat([bootstrap_df, cur_data])
+    input_long = input_df.reset_index()
+    bootstrap_df = pd.concat([input_long.loc[(input_long['chrom'] == cur_chrom).values]
+                              .assign(chrom='chr{}'.format(i+1))
+                              for i, cur_chrom in enumerate(cur_chroms)])
 
     bootstrap_df['chrom'] = tools.format_chromosomes(bootstrap_df['chrom'])
     bootstrap_df[['start', 'end']] = bootstrap_df[['start', 'end']].astype(int)
@@ -65,7 +65,7 @@ def segment_wise_jacknife_df(input_df):
 def bootstrap_shuffle_chroms(input_df, normal_name='diploid'):
     """Creates a bootstrap dataframe based on the original data. The chromosome-wise copy-number data 
     will be shuffled between samples. The corresponding dataframe will be generally similar to the
-    original data but lack the distinct features.
+    original data but have to no the distinct features of the original data.
     It can therefore not be used to calculate branch support or similar scores.
     """
 
@@ -108,7 +108,7 @@ def _bitstrs(tree):
 
 
 def compare_trees(tree1, tree2, fail_on_different_terminals=True):
-    """Compare two tree topologies. The length of the branches are not regarded.
+    """Compare to trees topologies. The length of the branches are not regarded.
 
     If fail_on_different_terminals is set to True the function fails if the terminals are not the
     same. This prevents accidental comparison of the wrong trees.
@@ -120,7 +120,7 @@ def compare_trees(tree1, tree2, fail_on_different_terminals=True):
     # false if terminals are not the same
     if set(term_names1) != set(term_names2):
         if fail_on_different_terminals:
-            raise ValueError("Leaf names of the two trees are not the same:\ntree 1: {}\ntree 2: {}.".format(
+            raise ValueError("Leaf names of the two trees are not the same:\ntree 1: {}\ntree 2:{}".format(
                 set(term_names1), set(term_names2)))
         else:
             return False
@@ -128,16 +128,17 @@ def compare_trees(tree1, tree2, fail_on_different_terminals=True):
     return _bitstrs(tree1) == _bitstrs(tree2)
 
 
-def _single_bootstrap_run(input_df, fst, bootstrap_method, i, N_bootstrap, normal_name='diploid'):
+def _single_bootstrap_run(input_df, fst, bootstrap_method, i, N_bootstrap, normal_name='diploid',
+                          tree_method='fastme', fastme='fastme'):
     cur_df = bootstrap_method(input_df)
     _, _, _, cur_final_tree, _, _ = main(
         input_df=cur_df,
-        asymm_upper_fst=fst,
-        asymm_lower_fst=fst,
+        asymm_fst=fst,
         normal_name=normal_name,
         input_tree=None,
         ancestral_reconstruction=False,
-        chr_separator='X')
+        tree_method=tree_method,
+        fastme=fastme)
 
     if (i+1) % (N_bootstrap//5) == 0:
         logger.info('{}/{} ({}%) bootstrap runs completed'.format(i + 1, N_bootstrap, 
@@ -154,14 +155,30 @@ def run_bootstrap(input_df,
                   seed=None,
                   normal_name='diploid',
                   show_progress=True,
-                  n_cores=None):
+                  n_cores=None,
+                  fst=None,
+                  tree_method='fastme',
+                  fastme='fastme'):
     """Run a given number of bootstrapping steps on the original data. 
 
     From the original data either a set of chromosome-wise bootstrap or segment-wise jackknife datasets
     are created. For every one of these datasets the optimal MEDICC tree is reconstructed and added
     to a tree dataframe. If the original tree is provided support values for the individual branches
     are calculated.
+
+    fst is the model used for the bootstrap trees (from medicc.io.read_fst). If None, the
+    native model is used (without WGDs if wgd=False). tree_method ('fastme' or 'nj') and fastme
+    (the FastME executable) select how the bootstrap trees are inferred (see
+    medicc.core.infer_tree_topology). If FastME cannot be used, one warning is logged and all
+    bootstrap trees are inferred with neighbour joining.
+
+    Raises MEDICCError if N_bootstrap is smaller than 5, and the errors of medicc.main.
     """
+    if N_bootstrap is None or N_bootstrap < MIN_BOOTSTRAP_NR:
+        raise MEDICCError(f"The number of bootstrap runs must be at least {MIN_BOOTSTRAP_NR} "
+                          f"(got {N_bootstrap}).")
+    n_samples = len(input_df.index.get_level_values('sample_id').unique())
+    tree_method, fastme = select_tree_method(tree_method, fastme, n_samples)
 
     # tqdm can be used for progress bars
     try:
@@ -181,15 +198,13 @@ def run_bootstrap(input_df,
         logger.info('Starting {} segment-wise jackknife runs'.format(N_bootstrap))
         bootstrap_method = segment_wise_jacknife_df
     else:
-        raise ValueError('method has to be either chr-wise or segment-wise.')
+        raise ValueError('method has to be either chr-wise or segment-wise')
 
     if seed is not None:
         np.random.seed(seed)
 
-    if wgd:
-        fst = io.read_fst()
-    else:
-        fst = io.read_fst(no_wgd=True)
+    if fst is None:
+        fst = io.read_fst(no_wgd=not wgd)
 
     if original_tree is not None:
         trees = {original_tree: [0, 'original']}
@@ -203,13 +218,13 @@ def run_bootstrap(input_df,
         except ImportError:
             raise ImportError("joblib must be installed for parallelization")
         initial_trees = Parallel(n_jobs=n_cores)(delayed(_single_bootstrap_run)(
-            input_df, fst, bootstrap_method, i, N_bootstrap, normal_name)
+            input_df, fst, bootstrap_method, i, N_bootstrap, normal_name, tree_method, fastme)
             for i in range(N_bootstrap))
     else:
         initial_trees = []
         for i in tqdm(range(N_bootstrap), disable=not show_progress):
             cur_tree = _single_bootstrap_run(
-                input_df, fst, bootstrap_method, i, N_bootstrap, normal_name)
+                input_df, fst, bootstrap_method, i, N_bootstrap, normal_name, tree_method, fastme)
             initial_trees.append(cur_tree)
 
     # delete duplicate trees

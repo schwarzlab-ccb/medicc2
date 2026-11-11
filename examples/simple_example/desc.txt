@@ -1,0 +1,3 @@
+chrom1 major_chr1.fasta minor_chr1.fasta
+chrom2 major_chr2.fasta minor_chr2.fasta
+

@@ -1,0 +1,7 @@
+	diploid	taxon_1	taxon_2	taxon_3	taxon_4	taxon_5
+diploid	0.0	1.0	2.0	4.0	0.0	3.0
+taxon_1	1.0	0.0	2.0	4.0	1.0	2.0
+taxon_2	2.0	2.0	0.0	2.0	2.0	4.0
+taxon_3	4.0	4.0	2.0	0.0	4.0	4.0
+taxon_4	0.0	1.0	2.0	4.0	0.0	3.0
+taxon_5	3.0	2.0	4.0	4.0	3.0	0.0
