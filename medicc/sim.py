@@ -156,8 +156,8 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
 
         reordered = pd.DataFrame(columns=['a','b'])
         root = edge.index[-2]
-        parent = [edge.iloc[root][0]] #stack
-        child = edge.iloc[root][1]
+        parent = [edge.loc[root,'a']] #stack
+        child = edge.loc[root, 'b']
         reordered = pd.concat([reordered, edge.iloc[[root]]])
         edge.drop(edge.index[root], inplace = True)
         while  not edge.empty:
@@ -165,7 +165,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
                 del parent[-1]
             if child <= n :
                 root = edge.a.isin([parent[-1]]).idxmax()
-                child = int(edge.iloc[edge.index==root]['b'])
+                child = int(edge.loc[root, 'b'])
                 reordered = pd.concat([reordered, edge.iloc[edge.index==root]])
                 edge.drop(root, inplace = True)
                 if child < n:
@@ -174,7 +174,7 @@ def rcoal(n, tips = None, uniform_branch_length=False, normal_name='diploid'):
             else:
                 parent.append(child)
                 root =  edge.a.isin([child]).idxmax()
-                child = int(edge.iloc[edge.index==root]['b'])
+                child = int(edge.loc[root, 'b'])
                 reordered = pd.concat([reordered, edge.iloc[edge.index==root]])
                 edge.drop(root, inplace = True)
                 if child < n:
