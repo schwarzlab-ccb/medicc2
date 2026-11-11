@@ -317,7 +317,7 @@ def calculate_cn_events_per_branch(cur_df, parent_name, child_name, alleles=['cn
             cur_child_cn.loc[np.intersect1d(loh_pos.loc[~loh_pos[allele]].index,
                                             cur_change_location.loc[cur_change_location].index), allele] += (1 if (cur_cn_change < 0) else -1)
 
-    event_df['cn_child'] = events_df['cn_child'].astype(int)
+    events_df['cn_child'] = events_df['cn_child'].astype(int)
     events_df['chrom'] = tools.format_chromosomes(events_df['chrom'])
     events_df = (events_df[['sample_id', 'allele', 'chrom', 'start', 'end', 'type', 'cn_child']]
                  .reset_index(drop=True)

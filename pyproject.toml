@@ -1,2 +1,8 @@
 [build-system]
 requires = ["cython >= 3.0", "setuptools", "wheel"]
+
+[tool.pytest.ini_options]
+# Tests live in tests/ (outside the package): import medicc from the source tree.
+pythonpath = ["."]
+# tests/migration/ holds plain scripts (run with python -B), not pytest tests.
+norecursedirs = ["migration", ".*", "build", "dist", "*.egg", "*.egg-info", "submodule-fstlib", "fstlib", "examples", "notebooks"]

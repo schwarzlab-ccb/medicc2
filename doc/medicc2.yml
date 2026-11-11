@@ -13,4 +13,3 @@ dependencies:
   - scipy>=1.7
   - matplotlib>=3.3.4
   - cython==3.1.2
-  - python=3.10
