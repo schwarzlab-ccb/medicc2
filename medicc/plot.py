@@ -102,7 +102,7 @@ def plot_cn_profiles(
                   )
 
     if hide_normal_chromosomes:
-        df = df.join(df.groupby('chrom')['is_normal'].all().to_frame('hide'))
+        df = df.join(df.groupby('chrom', observed=False)['is_normal'].all().to_frame('hide'))
         df = df.query("~hide").drop('hide', axis=1)
 
     if mincn=='auto':
@@ -122,7 +122,7 @@ def plot_cn_profiles(
         else:
             samples = [x for x in df.index.get_level_values('sample_id').unique() if 'internal_' not in x]
     nsamp = len(samples)
-    nsegs = df.loc[samples[0], :].groupby('chrom').size()
+    nsegs = df.loc[samples[0], :].groupby('chrom', observed=False).size()
 
     # == 2 because of diploid
     if input_tree is None or normal_name is None or nsamp == 2:
@@ -153,7 +153,7 @@ def plot_cn_profiles(
         df = df.join(cur_df, on=['chrom', 'start'])
 
     else:
-        chrom_offset = df.loc[samples[0],:].reset_index().groupby('chrom', sort=False).max()['end']
+        chrom_offset = df.loc[samples[0],:].reset_index().groupby('chrom', sort=False, observed=False).max()['end']
         chrom_offset.dropna(inplace=True)
         chrom_offset.loc[:] = np.append(0, chrom_offset.cumsum().values[:-1])
         chrom_offset.name='offset'
@@ -202,7 +202,7 @@ def plot_cn_profiles(
     plotheight = 4 * 0.2 * nrows * height_scale
     plotwidth = tree_width + track_width
     tree_width_ratio = tree_width / plotwidth
-    fig = plt.figure(figsize=(min(250, plotwidth), min(250, plotheight)), constrained_layout=True)
+    fig = plt.figure(figsize=(min(250, plotwidth), min(250, plotheight)), layout='constrained')
     if input_tree is None:
         gs = fig.add_gridspec(nrows, 1)
         cn_axes = [fig.add_subplot(gs[i]) for i in range(0, nrows)]
@@ -227,7 +227,7 @@ def plot_cn_profiles(
                   hide_internal_nodes=hide_internal_nodes)
     
     # Adjust the margin between the tree and cn tracks. Default is 0
-    fig.set_constrained_layout_pads(w_pad=0, h_pad=0, hspace=0.0, wspace=horizontal_margin_adjustment)
+    fig.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0.0, wspace=horizontal_margin_adjustment)
     ## iterate over samples and plot the track
     for sample, group in df.groupby('sample_id'):
         if sample not in samples:
@@ -405,7 +405,7 @@ def _plot_cn_profile(ax, label, data, mincn, maxcn, alleles, type='sample',
               color=COL_VLINES, linewidth=LINEWIDTH_SEGMENT_BOUNDARY)
 
     ## draw chromosome boundaries
-    chr_ends = data.reset_index().groupby('chrom').max()['end_pos']
+    chr_ends = data.reset_index().groupby('chrom', observed=False).max()['end_pos']
     chr_ends.dropna(inplace=True)
     linex = chr_ends.values[:-1]  # don't plot last
     ax.vlines(linex, ymin=mincn, ymax=maxcn, color=COL_VLINES, linewidth=LINEWIDTH_CHR_BOUNDARY)
@@ -887,7 +887,6 @@ def plot_cn_heatmap(input_df, final_tree=None, y_posns=None, cmax=None, total_co
                       title=title, label_colors=tree_label_colors)
         tree_ax.set_axis_off()
         tree_ax.set_axis_off()
-        fig.set_constrained_layout_pads(w_pad=0, h_pad=0, hspace=0.0, wspace=100)
     cax = axs[-1]
 
     gaps = (input_df.loc[cur_sample_labels[0]].eval('start') - 
@@ -905,7 +904,7 @@ def plot_cn_heatmap(input_df, final_tree=None, y_posns=None, cmax=None, total_co
 
     chr_ends = input_df.loc[cur_sample_labels[0]].copy()
     chr_ends['end_pos'] = np.cumsum([1]*len(chr_ends))
-    chr_ends = chr_ends.reset_index().groupby('chrom').max()['end_pos']
+    chr_ends = chr_ends.reset_index().groupby('chrom', observed=False).max()['end_pos']
     chr_ends = chr_ends.dropna()
     chr_ends = chr_ends.astype(int)
 
