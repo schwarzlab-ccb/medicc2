@@ -36,10 +36,11 @@ setup(
     packages=['medicc', 'fstlib', 'fstlib.cext'],
     scripts=['medicc2'],
     license='GPL-3',
+    python_requires='>=3.12',
     install_requires=[
-        'numpy>=1.20.1,<2.0',
+        'numpy>=2.0,<3',
         'pyyaml>=5.4.1',
-        'pandas>=1.2,<2.1',
+        'pandas>=3.0,<4',
         'biopython>=1.78',
         'scipy>=1.7',
         'matplotlib>=3.3.4'

@@ -231,7 +231,7 @@ def _read_fasta_as_dataframe(infile: str, separator: str = 'X', allele_columns =
     a data frame with the same format as the input TSV format. """
     logger.info(f"Reading FASTA dataset from description file {infile}.")
     description_file = pd.read_csv(infile,
-                                    delim_whitespace = True,
+                                    sep = r"\s+",
                                     header = None,
                                     names = ["chrom",] + allele_columns,
                                     usecols = ["chrom",] + allele_columns)
