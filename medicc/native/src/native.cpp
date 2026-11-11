@@ -72,10 +72,6 @@ static void *load_model(const char *path) {
                     m->a_even.AddArc(q, a);
             }
         }
-        m->a4 = quotient(m->a, false, 4);
-        m->ad4 = quotient(m->ad, true, 4);
-        m->a2 = quotient(m->a, false, 2);
-        m->ad2 = quotient(m->ad, true, 2);
         return m.release();
     } catch (const std::exception &e) {
         error = e.what();
@@ -200,10 +196,16 @@ const char *nf_history(void *p, const char *x, const char *y) {
         return nullptr;
     }
 }
-// Release the per-handle score caches (between rows of the distance matrix).
+// Across matrix rows retain only the bounded exact-score cache. The much larger
+// child-conditioned FSTs remain row-local.
+void nf_finish_row(void *p) {
+    static_cast<Model *>(p)->suffix_cache.clear();
+}
+// Explicitly release all per-handle caches.
 void nf_clear(void *p) {
     auto &m = *static_cast<Model *>(p);
     m.chromosome_scores.clear();
+    m.score_key_bytes = 0;
     m.suffix_cache.clear();
 }
 }

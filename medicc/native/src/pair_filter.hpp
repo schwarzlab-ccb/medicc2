@@ -1,10 +1,15 @@
 #pragma once
+// Pair graphs contain no epsilon arcs: all primitives and linear profiles
+// consume one symbol on each side. Use OpenFST's exact-label composition filter.
+using PairMatcher = fst::SortedMatcher<Fst>;
+using PairFilter = fst::NullComposeFilter<PairMatcher>;
+using PairStateTable = fst::GenericComposeStateTable<Arc, PairFilter::FilterState>;
 
 // Scalar pair scores through OpenFST's composition-filter extension. Each CN
 // string is composed with A (or the even-input part of A below a doubling) once
 // and cached with its forward/backward distances. A composition filter drops
 // every arc whose prefix + arc + suffix bound exceeds the current incumbent,
-// so the pair product is never expanded beyond the optimal cost.
+// so the pair product is expanded only within the current search budget.
 struct SuffixData {
     Vec fst;
     std::vector<W> forward, backward;
@@ -12,24 +17,24 @@ struct SuffixData {
 struct ComposeBudget {
     double cap = infinity, active_g = 0;
     int active_state = -1;
-    StateTable *top_table = nullptr;
+    PairStateTable *top_table = nullptr;
 };
 using Potential = std::function<double(int)>;
 static double distance_at(const std::vector<W> &values, int state) {
     return state >= 0 && state < int(values.size()) ? values[state].Value() : infinity;
 }
-class CostComposeFilter : public Filter {
+class CostComposeFilter : public PairFilter {
     std::shared_ptr<ComposeBudget> budget_;
     Potential left_h_, right_h_, left_p_, right_p_;
     bool top_ = false;
     double allowance_ = 0, prefix_ = 0;
 
   public:
-    CostComposeFilter(const Fst &left, const Fst &right, Matcher *lm = nullptr,
-                      Matcher *rm = nullptr)
-        : Filter(left, right, lm, rm) {}
+    CostComposeFilter(const Fst &left, const Fst &right, PairMatcher *lm = nullptr,
+                      PairMatcher *rm = nullptr)
+        : PairFilter(left, right, lm, rm) {}
     CostComposeFilter(const CostComposeFilter &other, bool safe = false)
-        : Filter(other, safe), budget_(other.budget_), left_h_(other.left_h_),
+        : PairFilter(other, safe), budget_(other.budget_), left_h_(other.left_h_),
           right_h_(other.right_h_), left_p_(other.left_p_), right_p_(other.right_p_),
           top_(other.top_), allowance_(other.allowance_) {}
     void Configure(std::shared_ptr<ComposeBudget> budget, Potential lh, Potential rh, Potential lp,
@@ -43,7 +48,7 @@ class CostComposeFilter : public Filter {
         allowance_ = allowance;
     }
     void SetState(int left, int right, const FilterState &fs) {
-        Filter::SetState(left, right, fs);
+        PairFilter::SetState(left, right, fs);
         if (!budget_)
             return;
         prefix_ = left_p_(left) + right_p_(right);
@@ -55,7 +60,7 @@ class CostComposeFilter : public Filter {
         }
     }
     FilterState FilterArc(Arc *left, Arc *right) const {
-        auto state = Filter::FilterArc(left, right);
+        auto state = PairFilter::FilterArc(left, right);
         if (state == FilterState::NoState() || !budget_)
             return state;
         double tail = left_h_(left->nextstate) + right_h_(right->nextstate);
@@ -66,7 +71,7 @@ class CostComposeFilter : public Filter {
     }
     uint64_t Properties(uint64_t props) const {
         // Filtering removes arcs; do not advertise accessibility/completeness.
-        return Filter::Properties(props) &
+        return PairFilter::Properties(props) &
                (fst::kAcceptor | fst::kIDeterministic | fst::kODeterministic | fst::kNoEpsilons |
                 fst::kNoIEpsilons | fst::kNoOEpsilons | fst::kILabelSorted | fst::kOLabelSorted |
                 fst::kAcyclic | fst::kInitialAcyclic | fst::kTopSorted | fst::kUnweighted |
@@ -77,18 +82,18 @@ struct SuffixSide {
     Ptr fst;
     Potential suffix, prefix;
 };
-static Ptr filtered_compose(const Fst &left, const Fst &right, StateTable **table,
+static Ptr filtered_compose(const Fst &left, const Fst &right, PairStateTable **table,
                             std::shared_ptr<ComposeBudget> budget, Potential lh, Potential rh,
                             Potential lp, Potential rp, bool top = false, double allowance = 0) {
     auto sorted_right = (right.Properties(fst::kILabelSorted, false) & fst::kILabelSorted)
                             ? Ptr(right.Copy())
                             : sorted(right);
-    fst::ComposeFstOptions<Arc, Matcher, CostComposeFilter, StateTable> options(
+    fst::ComposeFstOptions<Arc, PairMatcher, CostComposeFilter, PairStateTable> options(
         fst::CacheOptions(true, 4 << 20));
     options.filter = new CostComposeFilter(left, *sorted_right);
     options.filter->Configure(std::move(budget), std::move(lh), std::move(rh), std::move(lp),
                               std::move(rp), top, allowance);
-    options.state_table = new StateTable(left, *sorted_right);
+    options.state_table = new PairStateTable(left, *sorted_right);
     *table = options.state_table;
     return std::make_unique<fst::ComposeFst<Arc>>(left, *sorted_right, options);
 }
@@ -119,7 +124,7 @@ static SuffixSide suffix_side(Model &model, const std::string &word, int k,
                     [data](int s) { return distance_at(data->forward, s); }};
     Potential zero = [](int) { return 0.0; };
     for (int i = 0; i < k; ++i) {
-        StateTable *table;
+        PairStateTable *table;
         auto graph = filtered_compose(model.ad, *side.fst, &table, budget, zero, side.suffix, zero,
                                       side.prefix, false, allowance);
         auto suffix = [table, h = side.suffix](int s) { return h(table->Tuple(s).StateId2()); };
@@ -143,7 +148,7 @@ static PairGraph make_pair_graph(Model &model, const std::string &x, const std::
            rmin = distance_at(rd->backward, rd->fst.Start());
     auto left = suffix_side(model, x, k, budget, rmin),
          right = suffix_side(model, y, j, budget, lmin);
-    StateTable *table;
+    PairStateTable *table;
     auto exact = filtered_compose(*left.fst, *right.fst, &table, budget, left.suffix, right.suffix,
                                   left.prefix, right.prefix, true);
     budget->top_table = table;

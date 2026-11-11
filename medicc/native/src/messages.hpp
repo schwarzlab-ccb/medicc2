@@ -72,7 +72,7 @@ static Message join(Model &m, const Message &l, const Message &r) {
             }
             double room = best - total - remaining;
             auto graph = make_graph(m, parts[i].first, parts[i].second, k, j, false);
-            auto result = search(*graph.exact, room, true, graph.heuristic.get());
+            auto result = search(*graph, room, true);
             if (!std::isfinite(result.cost)) {
                 feasible = false;
                 break;
@@ -119,7 +119,7 @@ static std::pair<std::string, double> resolve(Model &m, const std::string &paren
             }
             auto graph = make_graph(m, parts[i].first, parts[i].second, 0, branch, true);
             auto result =
-                search(*graph.exact, best - total - remaining, true, graph.heuristic.get());
+                search(*graph, best - total - remaining, true);
             if (!std::isfinite(result.cost)) {
                 feasible = false;
                 break;

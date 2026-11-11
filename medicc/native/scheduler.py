@@ -58,7 +58,7 @@ def pairwise_distances(cn_str_dict, config, n_cores=1):
     def score_row(i):
         model = models.get()
         row = [model.score(*shortening.pair(prepared[i], prepared[j])) for j in range(i + 1, n)]
-        model.clear()  # caches are only reused within a row
+        model._finish_row()  # retain bounded scores; release row-local FSTs
         return i, row
 
     try:

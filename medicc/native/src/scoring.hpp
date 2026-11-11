@@ -7,6 +7,32 @@
 // score parent -> child; otherwise the symmetric pair distance via a common
 // ancestor.
 
+// A complete path supplies a feasible upper bound, never an approximate answer.
+static double greedy_pair(const PairGraph &graph) {
+    // Keep active_g unset: greedy prefixes are not necessarily shortest paths.
+    double cost = 0;
+    for (int s = graph.exact->Start(); s >= 0;) {
+        double final = graph.exact->Final(s).Value();
+        if (std::isfinite(final))
+            return cost + final <= graph.budget->cap ? cost + final : infinity;
+        double best = infinity, weight = 0;
+        int next = -1;
+        for (fst::ArcIterator<Fst> it(*graph.exact, s); !it.Done(); it.Next()) {
+            const auto &a = it.Value();
+            double value = a.weight.Value() + (*graph.heuristic)(a.nextstate);
+            if (value < best) {
+                best = value;
+                weight = a.weight.Value();
+                next = a.nextstate;
+            }
+        }
+        if (next < 0 || cost + best > graph.budget->cap)
+            return infinity;
+        cost += weight;
+        s = next;
+    }
+    return infinity;
+}
 static double fixed(Model &m, const std::string &x, const std::string &y, int k, int j,
                     bool directed, double cap) {
     if (!directed && (x > y || (x == y && k > j)))
@@ -18,15 +44,19 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
     double value;
     if (!directed) {
         auto graph = make_pair_graph(m, x, y, k, j, cap);
-        value = search(*graph.exact, cap, false, graph.heuristic.get(), graph.budget.get()).cost;
+        double feasible = greedy_pair(graph);
+        cap = std::min(cap, feasible - 1);
+        graph.budget->cap = cap;
+        value = std::min(feasible, search(*graph.exact, cap, false, graph.heuristic.get(),
+                                          graph.budget.get()).cost);
     } else {
         Message a{linear(x), 0, int(x.size())}, b{linear(y), 0, int(y.size())};
         auto graph = make_graph(m, a, b, k, j, directed);
-        value = search(*graph.exact, cap, false, graph.heuristic.get()).cost;
+        value = search(*graph, cap, false).cost;
     }
     // A bounded failure proves only value > cap, never global infeasibility.
     if (std::isfinite(value))
-        m.chromosome_scores.emplace(key, value);
+        cache_score(m, key, value);
     return value;
 }
 static double score(Model &m, const std::string &x, const std::string &y, bool directed) {
@@ -63,7 +93,7 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
                 bounds[i].lower[branch] = lower;
                 bounds[i].upper[branch] = upper;
                 if (lower == upper)
-                    m.chromosome_scores.emplace(score_key(a, b, k, j, directed), lower);
+                    cache_score(m, score_key(a, b, k, j, directed), lower);
             }
     }
     double best = infinity;
@@ -78,8 +108,14 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
                 break;
             double before = bounds[i].lower[branch], other = bound - before;
             // Integral costs: only a strict improvement is needed for a scalar.
-            double room = std::min(best - other - 1, bounds[i].upper[branch]);
+            double room = std::min(best - other - 1, bounds[i].upper[branch] - 1);
             double value = fixed(m, segments[i].first, segments[i].second, k, j, directed, room);
+            // No cheaper path certifies the feasible history as optimal.
+            if (!std::isfinite(value) && room == bounds[i].upper[branch] - 1) {
+                value = bounds[i].upper[branch];
+                cache_score(m, score_key(segments[i].first, segments[i].second, k, j, directed),
+                            value);
+            }
             if (!std::isfinite(value)) {
                 bound = infinity;
                 break;

@@ -67,6 +67,7 @@ def library():
         'nf_score': (d, [p, s, s, i]),
         'nf_history': (s, [p, s, s]),
         'nf_clear': (None, [p]),
+        'nf_finish_row': (None, [p]),
     }
     for name, (result, arguments) in signatures.items():
         function = getattr(lib, name)
@@ -213,6 +214,11 @@ class Model:
         lines = text.decode().splitlines()
         return float(lines[0]), [dict(zip(('type', 'before', 'after'), line.split('\t')))
                                  for line in lines[1:]]
+
+    def _finish_row(self):
+        """Release row-local FSTs; retain the bounded exact-score cache."""
+        self.check_open()
+        self.lib.nf_finish_row(self.handle)
 
     def clear(self):
         """Release the score caches of this handle."""

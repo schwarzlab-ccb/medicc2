@@ -16,6 +16,22 @@ static std::string score_key(std::string x, std::string y, int k, int j, bool di
     }
     return std::string(directed ? "D" : "K") + char('0' + k) + char('0' + j) + x + ":" + y;
 }
+// Bound both entry count and retained string bytes. Clearing only evicts exact
+// memoized answers; it never changes a search bound or caches a cutoff failure.
+static void cache_score(Model &m, std::string key, double value) {
+    constexpr size_t max_entries = 65536, max_key_bytes = 8 << 20;
+    if (key.size() > max_key_bytes)
+        return;
+    if (m.chromosome_scores.size() >= max_entries ||
+        m.score_key_bytes + key.size() > max_key_bytes) {
+        m.chromosome_scores.clear();
+        m.score_key_bytes = 0;
+    }
+    auto inserted = m.chromosome_scores.emplace(std::move(key), value);
+    if (inserted.second)
+        m.score_key_bytes += inserted.first->first.size();
+}
+
 static double cached_score(Model &m, const std::string &x, const std::string &y, int k, int j,
                            bool directed) {
     auto found = m.chromosome_scores.find(score_key(x, y, k, j, directed));
