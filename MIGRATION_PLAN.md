@@ -18,6 +18,7 @@
   * [Step 0.5: `medicc/event_reconstruction.py`: `cn_child` under pandas 3](#step-0-5)
   * [Step 0.6: packaging and environment files](#step-0-6)
   * [Step 0.7: green, plus identical outputs](#step-0-7)
+  * [Step 0.8: move master's tests to `tests/` (done by Claude, 2026-11-11)](#step-0-8)
 * [Phase 1: the model in Python (no native code yet)](#phase-1)
   * [Step 1: `medicc/factory.py` (edit): capped WGD in the legacy FST factory](#step-1)
   * [Step 2: `tests/oracle.py`: the independent literal-FST oracle](#step-2)
@@ -275,7 +276,7 @@ Type the comparison script **`tests/migration/compare_stacks.sh`**:
 # usage: tests/migration/compare_stacks.sh old|new    (run from the repo root, in the matching env)
 #        tests/migration/compare_stacks.sh diff
 set -u
-OUT=/tmp/medicc_stack_compare
+OUT=${OUT:-/tmp/medicc_stack_compare}   # OUT=... bash tests/migration/compare_stacks.sh ... writes elsewhere
 EV="--events --chromosomes-bed default --regions-bed default --plot none --no-plot-tree"
 runs=(
   "simple|examples/simple_example/simple_example.tsv $EV"
@@ -381,6 +382,32 @@ of master: Steps 0.2 to 0.7 give exactly these results: 66 / 9 failed + 2 passed
 Step 0.6 wheel builds. The `rm: -rf: No such file or directory` lines in pytest output come from master's own test
 teardown; they are harmless.) Then `mamba env remove -n medicc-oldstack`, and commit:
 "Move master to Python 3.12 / numpy 2 / pandas 3 toolchain".
+
+## <a id="step-0-8"></a>Step 0.8: move master's tests to `tests/` (done by Claude, 2026-11-11)
+**What/why.** One test folder for everything. master kept its suite inside the package; REF and this plan use a
+top-level `tests/`. **From here on, every command uses `tests/test_fsts.py` and `tests/test_medicc.py`.**
+* `git mv medicc/test_fsts.py tests/` and `git mv medicc/test_medicc.py tests/`. No content change: the tests use
+  `pathlib.Path(__file__).parent.parent` (still the repo root) and paths relative to the repo root.
+* `.github/workflows/tests.yml`: the three `pytest medicc/test_*.py` lines now point to `tests/`.
+* `pyproject.toml`: `[tool.pytest.ini_options]` with `pythonpath = ["."]` (plain `pytest` finds `medicc` in the
+  source tree, also without `pip install -e .`) and `norecursedirs` with `migration` (the plain scripts in
+  `tests/migration/` are never collected by pytest).
+* `tests/migration/compare_stacks.sh` (Step 0.1) and `tests/migration/test_01_wgd_cap.py` (Step 1) are in place.
+
+Also fixed while checking Phase 0: `event_df` → `events_df` typo in the Step 0.5 line, and the duplicate
+`- python=3.10` line in `doc/medicc2.yml` (it conflicted with `python=3.12`; the file now solves for linux-64 and
+osx-arm64).
+
+**Test (all checked):**
+```bash
+python -m pytest tests/test_fsts.py -q                                               # 66 passed
+pytest tests --collect-only -q | tail -1                                             # 124 tests, none from migration/
+python -m pytest tests/test_medicc.py -q -k "not gundem and not ipynb" --timeout=600 # 11 passed
+python -m pytest tests/test_medicc.py -q -k "gundem and not ipynb" --timeout=900     # 40 passed
+bash tests/migration/compare_stacks.sh new && bash tests/migration/compare_stacks.sh diff   # only the 5 D4 cells
+```
+**macOS:** master's test teardown runs `rm <dir> -rf`. BSD `rm` does not accept options after the path, so the
+`examples/test_output*` folders stay. Delete them after a run: `rm -rf examples/test_output*`.
 
 ---
 
@@ -1219,21 +1246,21 @@ those callers move with it. Do this step *before* typing the new CLI, while `med
    ```
 2. `git mv medicc2 medicc2-legacy`. **Do not edit its contents** (logger `medicc-main`, version string, options all stay).
 3. Update the callers to `medicc2-legacy` (all found with `git grep -n medicc2`):
-   * `medicc/test_medicc.py`: the 12 `subprocess.Popen(['python', "medicc2", …])` calls (lines 16–371);
+   * `tests/test_medicc.py`: the 12 `subprocess.Popen(['python', "medicc2", …])` calls (lines 16–371);
    * `examples/run_all_examples.sh`: the 5 `python medicc2 …` lines;
    * `setup.py`: `scripts=['medicc2-legacy']` for now (Step 46 adds the new `medicc2`);
    * `README.md`: the two usage lines (84, 128). Add one sentence: "The previous OpenFST implementation is available as
      `medicc2-legacy`." Leave the badges and package name `medicc2` alone.
-   * `.github/workflows/tests.yml` needs no change: it runs `pytest medicc/test_medicc.py`.
+   * `.github/workflows/tests.yml` needs no change: it runs `pytest tests/test_medicc.py` (since Step 0.8).
 
 **Test:**
 ```bash
 python medicc2-legacy examples/simple_example/simple_example.tsv /tmp/legacy_after --plot none --no-plot-tree --events
 diff -r /tmp/legacy_before /tmp/legacy_after && echo "PASS step 44 (legacy outputs unchanged)"
-python -m pytest medicc/test_medicc.py -k help_box -v          # pytest + pytest-timeout installed in medicc-migration
-git grep -n -E "\"medicc2\"|python medicc2 " -- medicc examples   # must print nothing
+python -m pytest tests/test_medicc.py -k help_box -v          # pytest + pytest-timeout installed in medicc-migration
+git grep -n -E "\"medicc2\"|python medicc2 " -- medicc tests examples   # must print nothing
 ```
-(Optional, slow: the full `python -m pytest medicc/test_medicc.py`, like master's CI.)
+(Optional, slow: the full `python -m pytest tests/test_medicc.py`, like master's CI.)
 
 ## <a id="step-45"></a>Step 45: `medicc/full_fst/cli.py`: the new default `medicc2`, with master's conventions
 **REF:** `medicc/full_fst/cli.py`. **Type it with the B2 deviations:**
@@ -1321,7 +1348,7 @@ python medicc2-legacy examples/simple_example/simple_example.tsv /tmp/legacy -v 
 ```bash
 for t in tests/migration/test_*.py tests/check_pairs.py tests/check_resolve_tie.py tests/check_ancestor_bounds.py; do
   python -B $t || { echo "FAIL $t"; break; }; done
-python -m pytest medicc/test_medicc.py -v            # master's suite, now exercising medicc2-legacy
+python -m pytest tests/test_medicc.py -v            # master's suite, now exercising medicc2-legacy
 python medicc2 --version && python medicc2-legacy --version   # two distinct commands
 ```
 
