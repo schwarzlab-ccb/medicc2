@@ -1,7 +1,7 @@
 #pragma once
 
 // Symbol mapping, linear acceptors for CN strings, the layer decomposition of
-// fixed-length message and dealyed (lazy) OpenFST composition helpers
+// fixed-length message and delayed (lazy) OpenFST composition helpers
 
 #include "types.hpp"
 

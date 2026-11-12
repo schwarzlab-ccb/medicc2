@@ -981,6 +981,8 @@ int main() {
 * `search.hpp`: the queue takes an optional `Heuristic*` (`Priority` = `g + h`) and an optional `ComposeBudget*`. Null = Dijkstra, as before.
 * `astar.hpp` (new, small): `Heuristic` (a function `evaluate` plus a cache of its values). Move your graph builder from `messages.hpp` here as `make_graph` (only `compose`, no heuristic).
 * `Model` gets `a_even` and `suffix_cache`. `scoring.hpp::fixed` uses `make_pair_graph` when not directed.
+* `search.hpp`: switch on the de-duplication of `settled` (`std::sort` + `std::unique` + `erase`). With A*, OpenFST can
+  dequeue a state twice (it re-enqueues a state whose distance improves later); without it, `tight` gets duplicate states.
 
 **Test:** `test_11` + bench, plus `tests/migration/test_27_astar.cpp`:
 
