@@ -147,6 +147,11 @@ python -m pytest medicc/test_fsts.py medicc/test_medicc.py -q -k 'fstlib or help
 **Test:** `tests/migration/test_00_sim.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import medicc.sim
 tree = medicc.sim.rcoal(4)
 assert sorted(c.name for c in tree.get_terminals()) == ["diploid", "sp_0001", "sp_0002", "sp_0003", "sp_0004"]
@@ -164,6 +169,11 @@ Also `groupby('chrom')` on a category column needs `observed=False` in pandas 3.
 **Test:** `tests/migration/test_00_plot.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import warnings
 import matplotlib
 matplotlib.use("Agg")
@@ -211,6 +221,11 @@ Save to `medicc/test_data/two_bin_oracle.npz`. (REF has a file with this name an
 **Test:** `tests/migration/test_03_golden.py` — it checks the file **makes sense**, not that it matches REF:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import numpy as np
 with np.load(ROOT / "medicc/test_data/two_bin_oracle.npz") as f:
     words = f["words"].tolist()
@@ -264,6 +279,11 @@ Choose and document a number for "not final".
 **Test:** `tests/migration/test_04_model_parts.py` — reads your file back:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 tokens = iter((ROOT / "medicc/objects/ancestral_parts.txt").read_text().split())
 seen = set()
 for name in tokens:
@@ -281,6 +301,10 @@ print("PASS step 4")
 Your state and arc counts may differ from REF's file (REF: `A` 212 states / 15688 arcs, `AD` 74 / 3108). That is fine.
 The real proof is Step 11: the engine with **your** file must match the golden answers.
 **Peek:** how REF's loader reads the file: `load_model` in `REF/medicc/native/src/native.cpp`.
+**Note:** this script is **new**: REF has no exporter. REF ships `ancestral_parts.txt` as a frozen file (added in `3ece895`);
+older branches copied it from `assets/`. The only partial generator is `scripts/generate_capped_ad.py` at tag
+`customized-fst-implementation` (`git show customized-fst-implementation:scripts/generate_capped_ad.py`), which reads `A`
+from an existing file and writes only the `AD` block. REF's file also has `LOH`, `LG` and `W1` blocks that the engine never loads.
 
 ---
 
@@ -414,6 +438,11 @@ int main() {
 **Test:** `tests/migration/test_11_engine_vs_oracle.py` — **the milestone of this phase**:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import numpy as np
 from medicc.native.model import Model, ModelConfig
 with np.load(ROOT / "medicc/test_data/two_bin_oracle.npz") as f:
@@ -471,6 +500,11 @@ C++17, `-O3`, link `fst`, same include/lib/rpath handling. It is loaded by ctype
 **Test:** `tests/migration/test_14_scheduler.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import pandas as pd
 from medicc.native import ModelConfig, pairwise_distances, reconstruct
 samples = {"b": "22", "a": "11"}
@@ -492,6 +526,11 @@ With `user_fst=PATH` it loads that fstlib FST, as master does. Allow a single tu
 **Test:** `tests/migration/test_15_io.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import fstlib
 from medicc import io
 from medicc.native import ModelConfig
@@ -507,6 +546,11 @@ print("PASS step 15")
 **Test:** `tests/migration/test_16_ancestors.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 from io import StringIO
 from Bio import Phylo
 from medicc.ancestors import reconstruct_ancestors
@@ -524,6 +568,11 @@ Type it in two turns: (a) the string/table helpers, (b) `main`.
 **Test:** `tests/migration/test_17_core.py` — take `meso5.tsv` and `meso5.new` from REF (raw input data, allowed):
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import medicc
 frame = medicc.io.read_and_parse_input_data(ROOT / "medicc/test_data/meso5.tsv")
 tree = medicc.io.import_tree(ROOT / "medicc/test_data/meso5.new")
@@ -678,6 +727,11 @@ This is where the big speed-up came in the real history.
 **Test:** `tests/migration/test_28_shortening.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 from medicc.native.shortening import prepare, pair
 from medicc.native.model import Model
 x, y = "111X22", "122X44"
@@ -718,6 +772,11 @@ If you keep it forever, memory grows without limit.
 **Test:** `test_11` + bench, plus `tests/migration/test_31_cache.py`:
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 from medicc.native.model import Model
 with Model() as model:
     first = model.score("1221X3", "2112X1")
@@ -750,6 +809,11 @@ Returns `(score, stages)`, each stage a dict `type, before, after`.
 **Test:**
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 from medicc.native.model import Model
 with Model() as model:
     cost, stages = model.history("1X1", "2X2")
@@ -770,6 +834,11 @@ Also fix: two WGDs with the same index must both stay in the BED overlap output.
 **Test:**
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 import medicc
 frame = medicc.io.read_and_parse_input_data(ROOT / "medicc/test_data/meso5.tsv")
 tree = medicc.io.import_tree(ROOT / "medicc/test_data/meso5.new")
@@ -801,6 +870,11 @@ It knows nothing about the engine: you pass `evaluate`.
 **Test:**
 
 ```python
+from pathlib import Path
+import sys
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
 from io import StringIO
 from Bio import Phylo
 from medicc.nni import nni_neighbours, topology_key, nni_search
