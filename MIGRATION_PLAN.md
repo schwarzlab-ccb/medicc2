@@ -99,7 +99,7 @@ name would mean nothing to a reader. You call it **`fstengine`**: MEDICC's FST e
 
 All other names follow REF. When you **peek**, translate: REF's `medicc/native/src/search.hpp` is your `medicc/fstengine/src/search.hpp`.
 
-**Lesson tests** live in `tests/migration/`. They are plain scripts, not pytest. Each Python one starts with:
+**Lesson tests** live in `tests/migration/`. **They are not in REF**: REF's own tests are `medicc/test_*.py`. The plan gives each lesson test, so you never look for it in REF. They are plain scripts, not pytest. Each Python one starts with:
 
 ```python
 from pathlib import Path
@@ -401,14 +401,36 @@ All files are in `medicc/fstengine/src/`. Read [the model in plain words](#plain
 
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/types.hpp`
 * **Create in NEW:** `medicc/fstengine/src/types.hpp` (first run `mkdir -p medicc/fstengine/src`)
-* **Test:** create `tests/migration/test_05_types.cpp`
+* **Test:** create `tests/migration/test_05_types.cpp` (a lesson test: not in REF, the code is below)
 
 **Problem.** Every C++ file needs the same names for a cost, a graph, a message and the model.
 **Idea.** `W` = `fst::TropicalWeightTpl<double>` (costs add along a path; take the minimum between paths).
 `Arc`, `Fst`, `Vec`, `Ptr` = OpenFST graph types. `Message {Vec fst; double offset; int length;}`.
 `Model {Vec a, ad; int max_wgds = 2;}` — **only what you need now**. Later steps add fields.
 **Type:** `types.hpp`.
-**Test:** `tests/migration/test_05_types.cpp`: include `types.hpp`, make a `Message` and a `Model`, check `max_wgds == 2`. Compile and run it.
+**Test:** `tests/migration/test_05_types.cpp` (compile and run it as in [C++ lesson tests](#how)):
+
+```cpp
+// Step 5 lesson test: the shared names exist and behave as the plan says.
+#include <cassert>
+#include "medicc/fstengine/src/types.hpp"
+
+int main() {
+    // W is tropical: Times adds costs along a path, Plus keeps the cheaper path.
+    assert(fst::Times(W(2), W(3)) == W(5));
+    assert(fst::Plus(W(2), W(3)) == W(2));
+    assert(W::Zero().Value() == infinity);  // "no path"
+    assert(W::One().Value() == 0);          // "free"
+
+    Message m;                               // empty acceptor, no pushed cost yet
+    assert(m.fst.NumStates() == 0 && m.offset == 0 && m.length == 0);
+
+    Model model;
+    assert(model.max_wgds == 2);
+    assert(model.a.NumStates() == 0 && model.ad.NumStates() == 0);  // filled by load_model (Step 10)
+    assert(INF > 1000000);                   // NOT_FINAL in ancestral_parts.txt
+}
+```
 
 ## Step 6: `fst_operations.hpp` — strings become graphs
 
