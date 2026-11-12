@@ -1,7 +1,7 @@
 # Build plan: a capped full-FST engine for MEDICC2, from master, like a developer
 
 **Updated 2026-11-11.** You build the engine yourself, one file at a time, in the order a developer
-with an idea (and no finished code) would build it. Older plans: `../backups/MIGRATION_PLAN.codex-20261111.md`,
+with an idea (and no finished code) would build it. Older plans (only on the other machine): `../backups/MIGRATION_PLAN.codex-20261111.md`,
 `../backups/MIGRATION_PLAN.claude-v1-20261111.md`.
 
 ## <a id="contents"></a>Contents
@@ -22,14 +22,14 @@ with an idea (and no finished code) would build it. Older plans: `../backups/MIG
 
 ---
 
-| | Path (relative to `~/Projects/Phylogenetics/medicc2-full-fst-migration`) | Revision | Mamba env |
+| | Path (relative to `~/Projects/project-medicc`) | Revision | Mamba env |
 |---|---|---|---|
-| **REF (answer key)** | `medicc2-full-fst-lloh-wgd2-capped` | branch `full-fst-lloh-wgd2-capped-x2`, commit `a0ff789` (Codex speed pass on top of tag `openfst-implementation`, `3ece895`) | `medicc2-full-fst-lloh-wgd2-capped` |
-| **NEW (you build here)** | `medicc2-feature-full-fst-capped-wgd2` | branch `feature-full-fst-capped-wgd2` (master baseline `04e9bfe`) | `medicc-migration` |
+| **REF (answer key)** | `medicc-full-fst-lloh-wgd2-capped-x2` | branch `full-fst-lloh-wgd2-capped-x2`, commit `a0ff789` (Codex speed pass on top of tag `openfst-implementation`, `3ece895`); checkout is at `578c60a`, which only adds PGO build files on top | `medicc-codex-ref` |
+| **NEW (you build here)** | `feature-full-fst-capped-wgd2` | branch `feature-full-fst-capped-wgd2` (master baseline `04e9bfe`) | `medicc-migration` |
 
 ```bash
 mamba activate medicc-migration
-cd ~/Projects/Phylogenetics/medicc2-full-fst-migration/medicc2-feature-full-fst-capped-wgd2
+cd ~/Projects/project-medicc/feature-full-fst-capped-wgd2
 ```
 
 ---
@@ -153,7 +153,7 @@ assert sorted(c.name for c in tree.get_terminals()) == ["diploid", "sp_0001", "s
 print("PASS step 0.2")
 ```
 
-**Peek:** `diff -u medicc/sim.py ../medicc2-full-fst-lloh-wgd2-capped/medicc/sim.py`.
+**Peek:** `diff -u medicc/sim.py ../medicc-full-fst-lloh-wgd2-capped-x2/medicc/sim.py`.
 
 ## Step 0.3: `medicc/plot.py` — old matplotlib calls
 
@@ -227,7 +227,7 @@ print("PASS step 3")
 **Extra check (one time):** compare your file with REF's. They should be equal. If not, one of the two oracles is wrong. Find out which.
 
 ```bash
-python -c "import numpy as np; a=np.load('medicc/test_data/two_bin_oracle.npz'); b=np.load('../medicc2-full-fst-lloh-wgd2-capped/medicc/test_data/two_bin_oracle.npz'); print(all(np.array_equal(a[k], b[k]) for k in ('directed','undirected')))"
+python -c "import numpy as np; a=np.load('medicc/test_data/two_bin_oracle.npz'); b=np.load('../medicc-full-fst-lloh-wgd2-capped-x2/medicc/test_data/two_bin_oracle.npz'); print(all(np.array_equal(a[k], b[k]) for k in ('directed','undirected')))"
 ```
 
 Delete the old `tests/migration/test_03_native_assets.py` (it asked you to copy files).
@@ -622,7 +622,7 @@ For now the cache has no size limit, and the scheduler clears it after each row.
 
 **Problem.** For bounds you need the cheapest possible cost between two neighbouring columns, for each WGD pair `(k_left, k_right)` (9 pairs).
 **Idea.** Compute it once in Python (min-plus over the copy-number transitions). Write it as C++ constants into `medicc/native/src/chromosome_constants.hpp`. The WGD charge is **not** in the table.
-**Test:** run it twice; the output is the same. Then compare once with REF's header: `cmp medicc/native/src/chromosome_constants.hpp ../medicc2-full-fst-lloh-wgd2-capped/medicc/native/src/chromosome_constants.hpp`.
+**Test:** run it twice; the output is the same. Then compare once with REF's header: `cmp medicc/native/src/chromosome_constants.hpp ../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/chromosome_constants.hpp`.
 
 ## Step 26: `bounds.hpp` — upper and lower bounds
 
