@@ -33,16 +33,18 @@ Then, inside the `medicc2` folder, run `pip install .` to install MEDICC2 to you
 
 ### Profile-guided compilation (PGO)
 
-For faster native-engine calculations, source installations can use GCC profile-guided
+For faster native-engine calculations, source installations can use profile-guided
 optimization. PGO compiles an instrumented engine, records how representative data exercise
 it, then recompiles using those profiles. In our three 100-sample matrix benchmarks,
 PGO alone reduced calculation time by approximately 8%; gains depend on the workload.
 The algorithm and numerical model are unchanged, and no additional memory allocator is required.
-PGO currently supports Linux with GCC (tested with GCC 11.5). The build checks
-the platform and the configured C++ compiler before compiling with PGO. The macOS
-PGO implementation is pending; macOS users should leave `MEDICC_PGO` unset and
-use the standard installation commands above. Other compilers, including Clang
-on Linux, are not yet supported for PGO.
+PGO supports Linux with GCC (tested with GCC 11.5) and macOS with Clang. The build
+checks the platform and the configured C++ compiler before compiling with PGO.
+Clang on Linux is not yet supported for PGO. Only `medicc.native._engine` is
+instrumented/optimized; the fstlib bindings keep their normal compilation flags.
+The Linux benchmark above is not a performance guarantee for macOS or other datasets.
+
+#### Linux / GCC
 
 After installing the dependencies above, run the following from the repository root in
 the activated environment. The editable installation makes the final compiled engine
@@ -69,7 +71,59 @@ unset MEDICC_PGO_DIR
 Run additional training datasets before the second pass to cover the modes you use,
 such as total copy numbers, `--no-wgd` or `--events`. The bundled example verifies the
 workflow; representative datasets are needed for useful optimization. Training runs
-must finish normally so GCC can write the profiles.
+must finish normally so the compiler runtime can write the profiles.
+
+#### macOS / Clang
+
+Install Apple's Command Line Tools (`xcode-select --install`) and activate the
+MEDICC2 environment. Use the same Clang and matching `llvm-profdata` for both
+passes. The following explicitly selects Apple's tools, even if conda also
+provides Clang. The workflow uses Clang's IR instrumentation and indexed profiles
+([Clang documentation](https://clang.llvm.org/docs/UsersManual.html#profile-guided-optimization)).
+
+```bash
+export CC="$(xcrun --find clang)" CXX="$(xcrun --find clang++)"
+python -m pip install --no-build-isolation -e .
+mkdir -p build
+export MEDICC_PGO_DIR="$(mktemp -d "$PWD/build/pgo.XXXXXX")"
+# Do not redirect the training output to an old profile location.
+unset LLVM_PROFILE_FILE
+
+MEDICC_PGO=generate python setup.py build_ext --inplace --force
+
+# Bundled training exercises scoring, reconstruction, events, NNI and data modes.
+# Add your representative datasets here before merging.
+python tools/benchmark_native.py --train
+
+# Clang writes default_<binary-id>.profraw; merge before the use pass.
+xcrun llvm-profdata merge -o "$MEDICC_PGO_DIR/default.profdata" "$MEDICC_PGO_DIR"/*.profraw
+MEDICC_PGO=use python setup.py build_ext --inplace --force
+unset MEDICC_PGO_DIR
+```
+
+Counter updates are atomic so multithreaded training is supported. Raw profiles
+are merged automatically for the same instrumented binary; different binaries
+have separate filenames. If you use a non-Apple Clang, use its matching
+`llvm-profdata` rather than `xcrun llvm-profdata`. The use pass requires
+`MEDICC_PGO_DIR/default.profdata` and rejects detected profile mismatches.
+
+To compare builds, `tools/benchmark_native.py` measures pairwise scoring,
+reconstruction/events and NNI on bundled datasets excluded from its training set:
+
+```bash
+# First run this with the standard build to establish fixed iteration counts.
+python tools/benchmark_native.py --calibrate build/benchmark-counts.json \
+    --seconds 1.5 --output build/standard.json
+# After the optimized build, reuse those counts.
+python tools/benchmark_native.py --iterations build/benchmark-counts.json \
+    --output build/pgo.json
+```
+
+For a reliable comparison, repeat measurements with both builds in alternating
+order and compare output hashes as well as timings. These timings exclude Python
+startup, input loading, warmup and output hashing; they include model creation and
+computation. Pairwise timings exclude reconstruction, while the pipeline cases
+include it. This is not a command-line end-to-end timing including plots or I/O.
 
 Keep the source, compiler, Python environment and build directory the same between
 passes. Missing or incompatible profiles cause the optimized build to fail. Repeat

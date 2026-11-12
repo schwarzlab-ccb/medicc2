@@ -26,7 +26,7 @@ if sys.platform.startswith("darwin"):
 
 fst_libraries = ["fst", "fstfar", "fstscript", "fstfarscript"]
 
-# GCC profile-guided optimization applies only to the native engine.
+# Profile-guided optimization applies only to the native engine.
 # Both passes must use the same source, compiler and build directory.
 native_compile_args = extra_compile_args + ['-O3']
 native_link_args = list(extra_link_args)
@@ -34,19 +34,24 @@ pgo_mode = os.environ.get('MEDICC_PGO', '')
 if pgo_mode not in ('', 'generate', 'use'):
   raise RuntimeError("MEDICC_PGO must be 'generate' or 'use', or unset")
 if pgo_mode:
-  if sys.platform == 'darwin':
-    # Reserved for the macOS/Clang profile generation and merge workflow.
-    raise RuntimeError("PGO for macOS is not implemented yet; unset MEDICC_PGO "
-                       "to use the standard build")
-  elif not sys.platform.startswith('linux'):
+  if sys.platform != 'darwin' and not sys.platform.startswith('linux'):
     raise RuntimeError(f"PGO is not implemented for {sys.platform}; unset "
                        "MEDICC_PGO to use the standard build")
 
-  # Linux/GCC implementation.
   pgo_dir = Path(os.environ.get('MEDICC_PGO_DIR', 'build/pgo')).resolve()
   if pgo_mode == 'generate':
     pgo_dir.mkdir(parents=True, exist_ok=True)
+    # Clang writes default_%m.profraw (binary-specific, with online merging);
+    # GCC writes .gcda files. Atomic counters also support threaded training.
     pgo_args = [f'-fprofile-generate={pgo_dir}', '-fprofile-update=atomic']
+  elif sys.platform == 'darwin':
+    profile = pgo_dir / 'default.profdata'
+    if not profile.is_file():
+      raise RuntimeError(f"No merged Clang profile found at {profile}; build with "
+                         "MEDICC_PGO=generate, run training workloads, then merge "
+                         "the .profraw files with matching llvm-profdata (see README)")
+    pgo_args = [f'-fprofile-use={profile}', '-Werror=profile-instr-out-of-date',
+                '-Werror=profile-instr-unprofiled']
   else:
     if not any(pgo_dir.rglob('*.gcda')):
       raise RuntimeError(f"No GCC profiles found in {pgo_dir}; build with "
@@ -62,21 +67,25 @@ class NativeBuildExt(build_ext):
 
   def build_extensions(self):
     if pgo_mode:
+      required = ('Clang C++ compiler; set CC=clang and CXX=clang++'
+                  if sys.platform == 'darwin' else
+                  'GCC C++ compiler; set CC=gcc and CXX=g++')
       compiler = getattr(self.compiler, 'compiler_cxx', None)
       if not compiler:
-        raise RuntimeError("PGO requires a GCC C++ compiler; set CC=gcc and CXX=g++")
+        raise RuntimeError(f"PGO requires a {required}")
       try:
         result = subprocess.run(compiler + ['-dM', '-E', '-x', 'c++', '-'],
                                 input='', text=True, capture_output=True,
                                 check=True, timeout=30)
       except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError("Could not identify the C++ compiler for PGO; "
-                           "set CC=gcc and CXX=g++") from exc
+        raise RuntimeError(f"Could not identify the C++ compiler for PGO; use a {required}") from exc
       macros = {line.split()[1] for line in result.stdout.splitlines()
                 if line.startswith('#define ') and len(line.split()) >= 2}
-      other_compilers = {'__clang__', '__INTEL_COMPILER',
-                         '__INTEL_LLVM_COMPILER', '__NVCOMPILER'}
-      if '__GNUC__' not in macros or macros & other_compilers:
+      other_compilers = {'__INTEL_COMPILER', '__INTEL_LLVM_COMPILER', '__NVCOMPILER'}
+      if sys.platform == 'darwin':
+        if '__clang__' not in macros or macros & other_compilers:
+          raise RuntimeError(f"PGO on macOS requires a {required}, or unset MEDICC_PGO")
+      elif '__GNUC__' not in macros or macros & (other_compilers | {'__clang__'}):
         raise RuntimeError("PGO currently supports GCC on Linux only; "
                            "set CC=gcc and CXX=g++ or unset MEDICC_PGO")
     super().build_extensions()
