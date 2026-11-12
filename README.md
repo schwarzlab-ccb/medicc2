@@ -31,6 +31,54 @@ All dependencies including OpenFST (v1.8.4) and FastME should be directly instal
 
 Then, inside the `medicc2` folder, run `pip install .` to install MEDICC2 to your environment. To build the extensions in place instead (for running `./medicc2` directly from the repository), run `python setup.py build_ext --inplace` with the conda environment activated.
 
+### Profile-guided compilation (PGO)
+
+For faster native-engine calculations, source installations can use GCC profile-guided
+optimization. PGO compiles an instrumented engine, records how representative data exercise
+it, then recompiles using those profiles. In our three 100-sample matrix benchmarks,
+PGO alone reduced calculation time by approximately 8%; gains depend on the workload.
+The algorithm and numerical model are unchanged, and no additional memory allocator is required.
+PGO currently supports Linux with GCC (tested with GCC 11.5). The build checks
+the platform and the configured C++ compiler before compiling with PGO. The macOS
+PGO implementation is pending; macOS users should leave `MEDICC_PGO` unset and
+use the standard installation commands above. Other compilers, including Clang
+on Linux, are not yet supported for PGO.
+
+After installing the dependencies above, run the following from the repository root in
+the activated environment. The editable installation makes the final compiled engine
+available to both the `medicc2` command and Python imports:
+
+```bash
+export CC=gcc CXX=g++
+python -m pip install --no-build-isolation -e .
+mkdir -p build
+export MEDICC_PGO_DIR="$(mktemp -d "$PWD/build/pgo.XXXXXX")"
+
+# First pass: compile with profiling instrumentation.
+MEDICC_PGO=generate python setup.py build_ext --inplace --force
+
+# Collect profiles; replace this example with representative small datasets.
+python medicc2 examples/simple_example/simple_example.tsv build/pgo-training \
+    --tree-method nj --plot none --no-plot-tree -j 1
+
+# Second pass: compile the optimized engine using the collected profiles.
+MEDICC_PGO=use python setup.py build_ext --inplace --force
+unset MEDICC_PGO_DIR
+```
+
+Run additional training datasets before the second pass to cover the modes you use,
+such as total copy numbers, `--no-wgd` or `--events`. The bundled example verifies the
+workflow; representative datasets are needed for useful optimization. Training runs
+must finish normally so GCC can write the profiles.
+
+Keep the source, compiler, Python environment and build directory the same between
+passes. Missing or incompatible profiles cause the optimized build to fail. Repeat
+both passes with a fresh profile directory after changing the C++ source or toolchain.
+The final engine needs no PGO environment variables at runtime. A later ordinary
+rebuild or reinstall can replace it; rerun this workflow to retain PGO. To return to
+the standard build, run `python setup.py build_ext --inplace --force` with
+`MEDICC_PGO` unset.
+
 ## Development mode
 If you want to make changes to the MEDICC2 source code, install MEDICC2 as explained above in "Installation from source" but install in editable mode (with `pip install -e .`). Any changes to the local files will now be reflected in your environment.
 
