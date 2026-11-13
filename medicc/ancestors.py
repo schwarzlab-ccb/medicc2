@@ -9,10 +9,19 @@ import medicc
 
 logger = logging.getLogger(__name__)
 
-def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0):
+def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0, n_cores=None):
+    """Reconstructs the ancestral profiles of all internal nodes of the tree.
+
+    For an fstlib FST samples_dict holds FSAs and so does the result. For the fstengine
+    (fst is a medicc.fstengine.ModelConfig) samples_dict holds copy-number strings, the result
+    holds strings, prune_weight must be 0 and n_cores threads are used.
+    """
 
     if len(samples_dict) == 2:
         return samples_dict
+
+    if isinstance(fst, medicc.fstengine.ModelConfig):
+        return _reconstruct_ancestors_fstengine(tree, samples_dict, fst, normal_name, n_cores)
 
     fsa_dict = samples_dict.copy()
     tree = Bio.Phylo.BaseTree.copy.deepcopy(tree)
@@ -58,6 +67,16 @@ def reconstruct_ancestors(tree, samples_dict, fst, normal_name, prune_weight=0):
                                                 "\nCheck whether your normal sample contains segments with copy number zero")
 
     return fsa_dict
+
+
+def _reconstruct_ancestors_fstengine(tree, cn_str_dict, model_config, normal_name, n_cores=None):
+    clade_list = [clade for clade in tree.find_clades(order="preorder") if clade.name != normal_name]
+    children = {node.name: [child.name for child in node.clades if child.name != normal_name]
+                for node in clade_list if len(node.clades) != 0}
+    leaves = {name: cn_str for name, cn_str in cn_str_dict.items() if name != normal_name}
+    profiles = medicc.fstengine.reconstruct(children, leaves, clade_list[0].name, cn_str_dict[normal_name], model_config, n_cores)
+    profiles[normal_name] = cn_str_dict[normal_name]
+    return profiles
 
 
 def intersect_clades_detmin(left, right, fst, prune_weight=None, detmin_before_intersect=True, detmin_after_intersect=True):
