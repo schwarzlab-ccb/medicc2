@@ -1,0 +1,62 @@
+# REFERENCE for migration Step 13 (not part of REF; untracked). Goes to pyproject.toml in NEW.
+# REF's pyproject.toml with master's metadata values, medicc.native -> medicc.fstengine, and
+# without the `events` extra (pyranges, Phase 6). The pytest block is NEW's, unchanged.
+[build-system]
+requires = ["setuptools>=77", "wheel", "cython>=3.0"]
+build-backend = "setuptools.build_meta"
+
+# Step 13: the package metadata moves here from setup.py (setup.py keeps only the extensions).
+# Values are master's (setup.py), except the license: setuptools >= 77 wants an SPDX expression
+# ("GPL-3.0-only") and then forbids the old "License ::" classifier.
+[project]
+name = "medicc2"
+dynamic = ["version"]
+description = "Whole-genome doubling-aware copy number phylogenies for cancer evolution"
+readme = "README.md"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Tom L Kaufmann", email = "tkau93@gmail.com" },
+    { name = "Marina Petkovic", email = "marina.55kovic@gmail.com" },
+    { name = "Chenxi Nie" },
+    { name = "Roland F Schwarz", email = "roland.f.schwarz@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.0,<3",
+    "pyyaml>=5.4.1",
+    "pandas>=3.0,<4",
+    "biopython>=1.78",
+    "scipy>=1.7",
+    "matplotlib>=3.3.4",
+]
+
+[project.optional-dependencies]
+Parallelization = ["joblib>=1.0.1"]
+
+[project.urls]
+Homepage = "https://bitbucket.org/schwarzlab/medicc2"
+
+[tool.setuptools]
+# Step 13: + medicc.fstengine
+packages = ["medicc", "medicc.fstengine", "fstlib", "fstlib.cext"]
+script-files = ["medicc2"]
+
+[tool.setuptools.dynamic]
+version = { attr = "medicc._version.__version__" }
+
+[tool.setuptools.package-data]
+# Step 13: + objects/*.txt (ancestral_parts.txt) and the engine sources (setup.py builds from them)
+medicc = ["objects/*.fst", "objects/*.bed", "objects/*.txt", "logging_conf.yaml"]
+"medicc.fstengine" = ["src/*.hpp", "src/*.cpp"]
+fstlib = ["logging_conf.yaml", "cext/*.pxd", "cext/*.pyx", "cext/*.h"]
+
+[tool.pytest.ini_options]
+# Match master and the OpenFST reference: package tests live beside medicc.
+testpaths = ["medicc"]
+# tests/migration/ holds plain scripts (run with python -B), not pytest tests.
+norecursedirs = ["migration", ".*", "build", "dist", "*.egg", "*.egg-info", "submodule-fstlib", "fstlib", "examples", "notebooks"]
