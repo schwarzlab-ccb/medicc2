@@ -14,10 +14,10 @@
 // One (k, j) for the whole genome; each WGD costs 1, charged once.
 
 // One WGD choice: the cheapest path for exactly k (left) and j (right) WGDs, without the WGD charge.
-static double fixed(Model &m, const std::string &x, const std::string &y, int k, int j, bool directed) {
+static double fixed(Model &m, const std::string &x, const std::string &y, int k, int j, bool directed, double cap) {
     Message a{linear(x), 0, int(x.size())}, b{linear(y), 0, int(y.size())};
     auto graph = make_graph(m, a, b, k, j, directed);
-    return search(*graph, infinity, false).cost;
+    return search(*graph, cap, false).cost;
 }
 
 // The minimum over all WGD choices, plus the WGD charge k + j
@@ -26,6 +26,6 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     double best = infinity;
     for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
         for (int j = 0; j <= m.max_wgds; ++j)
-            best = std::min(best, k + j + fixed(m, x, y, k, j, directed));
+            best = std::min(best, k + j + fixed(m, x, y, k, j, directed, best - k - j));
     return best;
 }
