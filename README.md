@@ -2,7 +2,7 @@
 
 [![PyPI](https://img.shields.io/pypi/v/medicc2?color=green)](https://pypi.org/project/medicc2/)
 [![Conda](https://img.shields.io/conda/v/bioconda/medicc2?color=green)](https://anaconda.org/bioconda/medicc2)
-[![Tests](https://github.com/ICCB-Cologne/medicc2/actions/workflows/tests.yml/badge.svg)](https://github.com/ICCB-Cologne/medicc2/actions/workflows/tests.yml)
+[![Tests](https://github.com/schwarzlab-ccb/medicc2/actions/workflows/tests.yml/badge.svg)](https://github.com/ICCB-Cologne/medicc2/actions/workflows/tests.yml)
 
 For more information see the accompanying publication [Whole-genome doubling-aware copy number phylogenies for cancer evolution with MEDICC2](https://genomebiology.biomedcentral.com/articles/10.1186/s13059-022-02794-9).
 
@@ -23,7 +23,7 @@ After activating the environment with `conda activate medicc_env` you can instal
 As MEDICC2 relies on OpenFST version 1.8.2 which is not packaged on PyPi you have to first install it using conda with `conda install -c conda-forge openfst=1.8.4`. Next you can install MEDICC2 via `pip install medicc2`.
 
 ## Installation from source
-Clone the MEDICC2 repository and its submodules using `git clone --recursive https://github.com/ICCB-Cologne/medicc2.git`. It is important to use the `--recursive` flag to also download the modified OpenFST submodule.
+Clone the MEDICC2 repository and its submodules using `git clone --recursive https://github.com/schwarzlab-ccb/medicc2`. It is important to use the `--recursive` flag to also download the modified OpenFST submodule.
 
 All dependencies including OpenFST (v1.8.2) should be directly installable via conda. A yaml file with a suggested MEDICC2 conda environment is provided in 'doc/medicc2.yml'. You can create a new conda environment with all requirements using `conda env create -f doc/medicc2.yml -n medicc_env`.
 
