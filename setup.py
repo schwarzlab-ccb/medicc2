@@ -1,9 +1,12 @@
+import glob
 import sys
 import os
+import subprocess
 from pathlib import Path
 
 from Cython.Build import cythonize
 from setuptools import Extension, setup
+from setuptools.command.build_ext import build_ext
 
 sys.path.append('fstlib/cext')
 conda_path = os.environ.get("CONDA_PREFIX", None)
@@ -68,5 +71,13 @@ setup(
                   extra_compile_args=extra_compile_args,
                   extra_link_args=extra_link_args,
                   language = "c++")
-    ])
+    ]) + [
+        Extension("medicc.fstengine._fstengine",
+                  ["medicc/fstengine/src/fstengine.cpp"],
+                  depends=glob.glob("medicc/fstengine/src/*.hpp"),
+                  libraries=["fst"],
+                  extra_compile_args=extra_compile_args + ['-O3'],
+                  extra_link_args=extra_link_args,
+                  language="c++"),
+    ]
 )
