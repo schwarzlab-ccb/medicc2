@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 import medicc
-from medicc import io, nj, tools, event_reconstruction
+from medicc import fstengine, io, nj, tools, event_reconstruction
 
 
 # prepare logger 
@@ -30,24 +30,44 @@ def main(input_df,
          total_cn=False,
          n_cores=None,
          reconstruct_events=False):
-    """ MEDICC Main Method """
+    """ MEDICC Main Method
 
-    symbol_table = asymm_fst.input_symbols()
+    asymm_fst is the model from medicc.io.read_fst: the fstengine (medicc.fstengine.ModelConfig)
+    or a custom fstlib FST. The fstengine requires prune_weight 0, and no_wgd=True restricts it
+    to gains and losses. Event reconstruction (reconstruct_events=True) is not available yet:
+    for the fstengine it comes with its event histories, a custom FST has no event labels.
+    Raises MEDICCError for unsupported options.
+    """
+    use_fstengine = isinstance(asymm_fst, fstengine.ModelConfig)
+    if reconstruct_events:
+        if use_fstengine:
+            raise MEDICCError("Event reconstruction is not available for the built-in model yet.")
+        raise MEDICCError("Event reconstruction is not available for a custom FST "
+                          "(an arbitrary FST has no event labels).")
+    sample_labels = input_df.index.get_level_values('sample_id').unique()
 
     ## Validate input
     logger.info("Validating input.")
-    io.validate_input(input_df, symbol_table, normal_name=normal_name)
+    if use_fstengine:
+        asymm_fst = _check_fstengine_options(input_df, asymm_fst, prune_weight, no_wgd, total_cn)
+        io.validate_input(input_df, normal_name=normal_name, min_samples=2)
+        CN_str_dict = create_cn_str_dict(input_df)
+        FSA_dict = CN_str_dict  # the fstengine works on copy-number strings, not FSAs
+    else:
+        symbol_table = asymm_fst.input_symbols()
+        io.validate_input(input_df, symbol_table, normal_name=normal_name)
 
-    ## Compile input data into FSAs stored in dictionaries
-    logger.info("Compiling input sequences into FSAs.")
-    FSA_dict, CN_str_dict = create_standard_fsa_dict_from_data(input_df, symbol_table, chr_separator)
-    sample_labels = input_df.index.get_level_values('sample_id').unique()
+        ## Compile input data into FSAs stored in dictionaries
+        logger.info("Compiling input sequences into FSAs.")
+        FSA_dict, CN_str_dict = create_standard_fsa_dict_from_data(input_df, symbol_table, chr_separator)
 
     ## Reconstruct a tree
     if input_tree is None:
         ## Calculate pairwise distances
         logger.info("Calculating pairwise distance matrices")
-        if n_cores is not None and n_cores > 1:
+        if use_fstengine:
+            pairwise_distances = fstengine.pairwise_distances(CN_str_dict, asymm_fst, n_cores)
+        elif n_cores is not None and n_cores > 1:
             pairwise_distances = parallelization_calc_pairwise_distance(sample_labels, asymm_fst, CN_str_dict,
                                                                                     n_cores)
         else:
@@ -92,11 +112,15 @@ def main(input_df,
                                                  samples_dict=FSA_dict,
                                                  fst=asymm_fst,
                                                  normal_name=normal_name,
-                                                 prune_weight=prune_weight)
+                                                 prune_weight=prune_weight,
+                                                 n_cores=n_cores)
 
         ## Create and write output data frame with ancestors
         logger.info("Creating output copynumbers.")
-        output_df = create_df_from_fsa(input_df, ancestors)
+        if use_fstengine:
+            output_df = create_df_from_cn_str_dict(input_df, ancestors)
+        else:
+            output_df = create_df_from_fsa(input_df, ancestors)
 
         ## Update branch lengths with ancestors
         logger.info("Updating branch lengths of final tree using ancestors.")
@@ -128,24 +152,39 @@ def main(input_df,
     return sample_labels, pairwise_distances, nj_tree, final_tree, output_df, events_df
 
 
-def create_standard_fsa_dict_from_data(input_data,
-                                       symbol_table: fstlib.SymbolTable,
-                                       separator: str = "X") -> dict:
-    """ Creates a dictionary of FSAs from input DataFrame or Series.
-    The keys of the dictionary are the sample/taxon names. 
-    If the input is a DataFrame, the FSA will be the concatenated copy number profiles of all allele columns"""
+def _check_fstengine_options(input_df, model_config, prune_weight, no_wgd, total_cn):
+    """Check the main() options for the fstengine; returns the model config to use."""
+    if prune_weight < 0:
+        raise MEDICCError("prune_weight must not be negative.")
+    if prune_weight > 0:
+        raise MEDICCError("prune_weight > 0 is not supported by the built-in model yet (work in "
+                          "progress). Use prune_weight=0.")
+    if (total_cn or model_config.total_copy_numbers) and len(input_df.columns) != 1:
+        raise MEDICCError("Total copy numbers require exactly one copy-number column.")
+    if not set(np.unique(input_df.values)) <= set('012345678'):
+        raise MEDICCError("The built-in model requires integer copy numbers from 0 to 8.")
+    if no_wgd and not model_config.no_wgd:
+        model_config = fstengine.ModelConfig(total_copy_numbers=model_config.total_copy_numbers,
+                                             no_wgd=True)
+    return model_config
 
-    fsa_dict = {}
+
+def create_cn_str_dict(input_data, separator="X"):
+    """ Creates a dictionary of copy-number strings from input DataFrame or Series.
+    The keys of the dictionary are the sample/taxon names.
+    If the input is a DataFrame, the string is the concatenated copy number profile of all allele
+    columns, chromosomes separated by separator. """
+
     cn_str_dict = {}
     if isinstance(input_data, pd.DataFrame):
-        logger.info('Creating FSA for pd.DataFrame with the following data columns: {}'.format(
+        logger.info('Creating copy-number strings for pd.DataFrame with the following data columns: {}'.format(
             input_data.columns.values))
         def aggregate_copy_number_profile(cnp):
             return separator.join([separator.join(["".join(x.astype('str'))
                                                    for _, x in cnp[allele].groupby('chrom', observed=False)]) for allele in cnp.columns])
 
     elif isinstance(input_data, pd.Series):
-        logger.info('Creating FSA for pd.Series with the name {}'.format(input_data.name))
+        logger.info('Creating copy-number strings for pd.Series with the name {}'.format(input_data.name))
         def aggregate_copy_number_profile(cnp):
             return separator.join(["".join(x.astype('str')) for _, x in cnp.groupby('chrom', observed=False)])
 
@@ -154,12 +193,24 @@ def create_standard_fsa_dict_from_data(input_data,
                           "pd.DataFrame or pd.Series. \n input provided was {}".format(type(input_data)))
     
     for taxon, cnp in input_data.groupby('sample_id'):
-        cn_str = aggregate_copy_number_profile(cnp)
-        fsa_dict[taxon] = fstlib.factory.from_string(cn_str,
-                                                     arc_type="standard",
-                                                     isymbols=symbol_table,
-                                                     osymbols=symbol_table)
-        cn_str_dict[taxon] = cn_str
+        cn_str_dict[taxon] = aggregate_copy_number_profile(cnp)
+
+    return cn_str_dict
+
+
+def create_standard_fsa_dict_from_data(input_data,
+                                       symbol_table: fstlib.SymbolTable,
+                                       separator: str = "X") -> dict:
+    """ Creates a dictionary of FSAs from input DataFrame or Series.
+    The keys of the dictionary are the sample/taxon names. 
+    If the input is a DataFrame, the FSA will be the concatenated copy number profiles of all allele columns"""
+
+    cn_str_dict = create_cn_str_dict(input_data, separator)
+    fsa_dict = {taxon: fstlib.factory.from_string(cn_str,
+                                                  arc_type="standard",
+                                                  isymbols=symbol_table,
+                                                  osymbols=symbol_table)
+                for taxon, cn_str in cn_str_dict.items()}
 
     return fsa_dict, cn_str_dict
 
@@ -231,21 +282,34 @@ def create_df_from_fsa(input_df: pd.DataFrame, fsa, separator: str = 'X'):
     The allele names are taken from the input_df columns and the returned data frame has the same 
     number of rows and row index as the input_df. """
 
-    alleles = input_df.columns
     if not isinstance(fsa, dict):
         raise MEDICCError("fsa input to create_df_from_fsa has to be a dict"
                           "Input type is {}".format(type(fsa)))
 
+    samples = input_df.index.get_level_values('sample_id').unique()
+    cn_str_dict = {node: tools.fsa_to_string(fsa[node]) for node in fsa if node not in samples}
+
+    return create_df_from_cn_str_dict(input_df, cn_str_dict, separator)
+
+
+def create_df_from_cn_str_dict(input_df: pd.DataFrame, cn_str_dict, separator: str = 'X'):
+    """
+    Takes a dict of copy-number strings (see create_cn_str_dict) and extracts the copy number
+    profiles of the nodes that are not samples in input_df.
+    The allele names are taken from the input_df columns and the returned data frame has the same
+    number of rows and row index as the input_df. """
+
+    alleles = input_df.columns
     nr_alleles = len(alleles)
     samples = input_df.index.get_level_values('sample_id').unique()
     output_df = input_df.unstack('sample_id')
 
     # Create dict and concat later to prevent pandas PerformanceWarning
     internal_cns = dict()
-    for node in fsa:
+    for node in cn_str_dict:
         if node in samples:
             continue
-        cns = tools.fsa_to_string(fsa[node]).split(separator)
+        cns = cn_str_dict[node].split(separator)
         if len(cns) % nr_alleles != 0:
             raise MEDICCError('For sample {} we have {} haplotype-specific chromosomes for {} alleles'
                               '\nnumber of chromosomes has to be divisible by nr of alleles'.format(node,
@@ -255,6 +319,9 @@ def create_df_from_fsa(input_df: pd.DataFrame, fsa, separator: str = 'X'):
         for i, allele in enumerate(alleles):
             cn = list(''.join(cns[(i*nr_chroms):((i+1)*nr_chroms)]))
             internal_cns[(allele, node)] = cn
+
+    if len(internal_cns) == 0:  # e.g. a single tumour sample: no internal nodes
+        return input_df.copy()
 
     internal_cns_df = pd.DataFrame(internal_cns, index=output_df.index)
     internal_cns_df.columns.names = ['allele', 'sample_id']
@@ -397,19 +464,31 @@ def infer_tree_topology(pairwise_distances, labels, normal_name):
 
 
 def update_branch_lengths(tree, fst, ancestor_fsa, normal_name='diploid'):
-    """ Updates the branch lengths in the tree using the internal nodes supplied in the FSA dict 
+    """ Updates the branch lengths in the tree using the internal nodes supplied in the FSA dict.
+    For the fstengine (fst is a medicc.fstengine.ModelConfig) the dict holds copy-number strings
+    and the branch lengths are fstengine directed scores; an unreachable child raises MEDICCError.
     """
-    if len(ancestor_fsa) == 2:
-        child_clade = [x for x in tree.find_clades() if x.name is not None and x.name != normal_name][0]
-        child_clade.branch_length = float(fstlib.score(
-            fst, ancestor_fsa[normal_name], ancestor_fsa[child_clade.name]))
-
     if not isinstance(ancestor_fsa, dict):
         raise MEDICCError("input ancestor_fsa to function update_branch_lengths has to be either a dict"
                           "provided type is {}".format(type(ancestor_fsa)))
 
-    def _distance_to_child(fst, ancestor_fsa, sample_1, sample_2):
-        return float(fstlib.score(fst, ancestor_fsa[sample_1], ancestor_fsa[sample_2]))
+    if isinstance(fst, fstengine.ModelConfig):
+        model = fstengine.Model(fst)
+
+        def _distance_to_child(fst, ancestor_fsa, sample_1, sample_2):
+            distance = model.score(ancestor_fsa[sample_1], ancestor_fsa[sample_2], directed=True)
+            if not np.isfinite(distance):
+                raise MEDICCError(f"{sample_2} cannot be reached from {sample_1}.")
+            return distance
+    else:
+        model = None
+
+        def _distance_to_child(fst, ancestor_fsa, sample_1, sample_2):
+            return float(fstlib.score(fst, ancestor_fsa[sample_1], ancestor_fsa[sample_2]))
+
+    if len(ancestor_fsa) == 2:
+        child_clade = [x for x in tree.find_clades() if x.name is not None and x.name != normal_name][0]
+        child_clade.branch_length = _distance_to_child(fst, ancestor_fsa, normal_name, child_clade.name)
 
     for clade in tree.find_clades():
         if clade.name is None:
@@ -425,6 +504,9 @@ def update_branch_lengths(tree, fst, ancestor_fsa, normal_name='diploid'):
                     brs = _distance_to_child(fst, ancestor_fsa, clade.name, child.name)
                 logger.debug(f'branch length: {brs}')
                 child.branch_length = brs
+
+    if model is not None:
+        model.close()
 
 
 def summarize_patient(tree, pdm, sample_labels, normal_name='diploid', events_df=None):
@@ -479,31 +561,6 @@ def summarize_patient(tree, pdm, sample_labels, normal_name='diploid', events_df
     })
     
     return result
-
-
-def detect_wgd(input_df, sample, total_cn=False, wgd_x2=False, n_wgd=None):
-    if n_wgd is not None and n_wgd > 2:
-        raise NotImplementedError("MEDICC can only detect WGDs with n_wgd <= 2")
-
-    if n_wgd is None:
-        wgd_fst = io.read_fst(total_copy_numbers=total_cn, wgd_x2=wgd_x2, n_wgd=n_wgd)
-        no_wgd_fst = io.read_fst(no_wgd=True)
-    elif n_wgd == 1:
-        wgd_fst = io.read_fst(total_copy_numbers=total_cn, wgd_x2=wgd_x2, n_wgd=2)
-        no_wgd_fst = io.read_fst(total_copy_numbers=total_cn, wgd_x2=wgd_x2, n_wgd=1)
-    elif n_wgd == 2:
-        wgd_fst = io.read_fst(total_copy_numbers=total_cn, wgd_x2=wgd_x2, n_wgd=None)
-        no_wgd_fst = io.read_fst(total_copy_numbers=total_cn, wgd_x2=wgd_x2, n_wgd=2)
-
-    diploid_fsa = medicc.tools.create_diploid_fsa(no_wgd_fst)
-    symbol_table = no_wgd_fst.input_symbols()
-    fsa_dict, _ = medicc.create_standard_fsa_dict_from_data(input_df.loc[[sample]],
-                                                         symbol_table, 'X')
-
-    distance_wgd = float(fstlib.score(wgd_fst, diploid_fsa, fsa_dict[sample]))
-    distance_no_wgd = float(fstlib.score(no_wgd_fst, diploid_fsa, fsa_dict[sample]))
-
-    return distance_wgd < distance_no_wgd
 
 
 class MEDICCError(Exception):
