@@ -7,6 +7,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
+import medicc.fstengine
 from medicc import plot, tools
 
 logger = logging.getLogger(__name__)
@@ -70,78 +71,42 @@ def read_and_parse_input_data(filename, normal_name='diploid', input_type='tsv',
     return input_df
 
 
-def read_fst(user_fst=None, no_wgd=False, n_wgd=None, total_copy_numbers=False, wgd_x2=False,
-             force_wgd=False):
-    """Simple wrapper for loading the FST using the fstlib read function. """
+def read_fst(user_fst=None, no_wgd=False, total_copy_numbers=False):
+    """Select the copy-number model passed to medicc.main.
 
-    objects_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "objects")
+    Parameters
+    ----------
+    user_fst : str, optional
+        Path to a custom FST. It is loaded with fstlib and scored with OpenFST composition;
+        event reconstruction is not available for it. no_wgd and total_copy_numbers are ignored.
+    no_wgd : bool
+        Restrict the fstengine model to losses (including LOH) and gains.
+    total_copy_numbers : bool
+        Total copy-number data (one column, normal CN 2). The fstengine model is the same as for
+        allele-specific data.
 
-    fst_paths = {
-        (True, None, False, False, False): os.path.join(objects_dir, 'no_wgd_asymm.fst'),
-        (True, None, True, False, False): os.path.join(objects_dir, 'no_wgd_asymm.fst'),
-        (False, None, False, False, False): os.path.join(objects_dir, 'wgd_asymm.fst'),
-        (False, None, False, True, False): os.path.join(objects_dir, 'wgd_x2_asymm.fst'),
-        (False, None, True, False, False): os.path.join(objects_dir, 'wgd_total_cn_asymm.fst'),
-        (False, 1, False, False, False): os.path.join(objects_dir, 'wgd_1_asymm.fst'),
-        (False, 2, False, False, False): os.path.join(objects_dir, 'wgd_2_asymm.fst'),
-        (False, 3, False, False, False): os.path.join(objects_dir, 'wgd_3_asymm.fst'),
-        (False, 1, False, True, False): os.path.join(objects_dir, 'wgd_x2_1_asymm.fst'),
-        (False, 1, True, False, False): os.path.join(objects_dir, 'wgd_total_cn_1_asymm.fst'),
-        (False, None, False, False, True): os.path.join(objects_dir, 'forced_1_wgd_asymm.fst'),
-        (False, None, True, False, True): os.path.join(objects_dir, 'forced_1_wgd_total_cn_asymm.fst'),
-        (False, None, False, True, True): os.path.join(objects_dir, 'forced_1_wgd_x2_asymm.fst'),
-    }
-
+    Returns
+    -------
+    medicc.fstengine.ModelConfig or fstlib.Fst
+        The fstengine model (losses incl. LOH and gains around up to two capped WGDs per branch)
+        or the custom FST.
+    """
     if user_fst is not None:
-        fst_path = user_fst
-    else:
-        fst_key = (no_wgd, n_wgd, total_copy_numbers, wgd_x2, force_wgd)
-        if fst_key not in fst_paths:
-            raise MEDICCIOError("Invalid combination of the following parameters for loading the FST: "
-                                "no_wgd, n_wgd, total_copy_numbers, wgd_x2, force_wgd")
-        fst_path = fst_paths[fst_key]
-    
-    # elif no_wgd:
-    #     fst_path = os.path.join(objects_dir, 'no_wgd_asymm.fst')
-    # elif wgd_x2:
-    #     fst_path = os.path.join(objects_dir, 'wgd_x2_asymm.fst')
-    #     if n_wgd == 1:
-    #         fst_path = os.path.join(objects_dir, 'wgd_x2_1_asymm.fst')
-    # elif total_copy_numbers:
-    #     fst_path = os.path.join(objects_dir, 'wgd_total_cn_asymm.fst')
-    #     if n_wgd == 1:
-    #         fst_path = os.path.join(objects_dir, 'wgd_total_cn_1_asymm.fst')
-    # elif n_wgd is not None and int(n_wgd) <= 3:
-    #     fst_path = os.path.join(objects_dir, 'wgd_{}_asymm.fst'.format(int(n_wgd)))
-    # else:
-    #     fst_path = os.path.join(objects_dir, 'wgd_asymm.fst')
-
-    return fstlib.read(fst_path)
+        return fstlib.read(user_fst)
+    return medicc.fstengine.ModelConfig(total_copy_numbers=total_copy_numbers, no_wgd=no_wgd)
 
 
-def load_main_fsts(return_symbol_table=False):
-    asymm_fst = read_fst()
-    asymm_fst_nowgd = read_fst(no_wgd=True)
-    asymm_fst_1_wgd = read_fst(n_wgd=1)
-    asymm_fst_2_wgd = read_fst(n_wgd=2)
 
-    if return_symbol_table:
-        symbol_table = asymm_fst.input_symbols()
-        return asymm_fst, asymm_fst_nowgd, asymm_fst_1_wgd, asymm_fst_2_wgd, symbol_table
-    else:
-        return asymm_fst, asymm_fst_nowgd, asymm_fst_1_wgd, asymm_fst_2_wgd
-
-
-def validate_input(input_df, symbol_table=None, normal_name='diploid'):
+def validate_input(input_df, symbol_table=None, normal_name='diploid', min_samples=3):
     """Validate the input DataFrame."""
 
     # Check that normal sample is present
     if normal_name not in input_df.index.get_level_values('sample_id').unique():
         raise MEDICCIOError(f"Normal sample '{normal_name}' not found in input data. Specify a "
                             "different name using the --normal-name flag.")
-    
-    if input_df.index.get_level_values('sample_id').nunique() <= 2:
-        raise MEDICCIOError("MEDICC2 requires at least 2 non-diploid samples to run.")
+
+    if input_df.index.get_level_values('sample_id').nunique() < min_samples:
+        raise MEDICCIOError(f"MEDICC2 requires at least {min_samples - 1} non-diploid samples to run.")
 
     # Check if the index names are correct
     if input_df.index.names != ['sample_id', 'chrom', 'start', 'end']:
@@ -331,11 +296,11 @@ def write_tree_files(tree, out_name: str, plot_tree=True, draw_ascii=False, norm
                        show_branch_lengths=True)
 
 
-def write_branch_lengths(tree, out_name: str):
+def write_branch_lengths(tree, out_name: str, normal_name='diploid'):
     """Writes a file with the branch lengths of the tree."""
     with open(out_name, "w") as f:
         for node in tree.find_clades():
-            if node.name is not None and node.name != 'diploid':
+            if node.name is not None and node.name != normal_name:
                 f.write("{}\t{}\n".format(node.name, node.branch_length))
 
 
