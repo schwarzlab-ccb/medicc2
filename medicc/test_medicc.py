@@ -55,7 +55,8 @@ def test_medicc_distance_speed_up():
         
         return profile_1_list, profile_2_list
 
-    medicc_fst = medicc.io.read_fst()
+    medicc_fst = medicc.io.read_fst(user_fst=os.path.join(
+        os.path.dirname(os.path.realpath(medicc.__file__)), 'objects', 'wgd_asymm.fst'))
     symbol_table = medicc_fst.input_symbols()
     profile_1_list, profile_2_list = generate_random_profiles()
 
