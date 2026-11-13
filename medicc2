@@ -82,7 +82,7 @@ parser.add_argument("--bootstrap-nr",
 parser.add_argument("--prefix", '-p', type=str, dest='prefix', default=None,
                     help='Output prefix to be used (default: input filename).', required=False)
 parser.add_argument("--no-wgd", action='store_true', default=False, dest='no_wgd',
-                    help='Enable whole-genome doubling events (default: False).', required=False)
+                    help='Disable whole-genome doubling events (default: False).', required=False)
 parser.add_argument('--plot',
                     type=str,
                     default='auto',
@@ -129,16 +129,26 @@ parser.add_argument("--maxcn", type=int, dest='maxcn', default=8,
                     help='''Expert option: maximum CN at which the input is capped. Does not change FST.
                             The maximum possible value is 8. Default: 8''')
 parser.add_argument("--prune-weight", type=int, dest='prune_weight', default=0,
-                    help='''Expert option: Prune weight in ancestor reconstruction. Values >0 might
-                            result in more accurate ancestors but will require more time and memory. Default: 0''')
+                    help='''Expert option: Prune weight in ancestor reconstruction. Values >0 are not
+                            supported by the built-in model yet (work in progress), only with --fst. Default: 0''')
 parser.add_argument("--fst", type=str, dest='fst', default=None,
-                    help='Expert option: path to an alternative FST.')
+                    help='''Expert option: path to a custom FST (e.g. one of the FSTs in medicc/objects).
+                    It replaces the built-in model; --events is not available with it.''')
 parser.add_argument("--fst-chr-separator", type=str, dest='fst_chr_separator', default='X',
                     help = 'Expert option: character used to separate chromosomes in the FST (default: \"X\").')
 parser.add_argument("--wgd-x2", action='store_true', default=False, dest='wgd_x2',
-                    help='Expert option: Treat WGD as a x2 operation (default: False).', required=False)
+                    help='Expert option: no effect, the built-in model always treats WGD as a x2 '
+                         'operation (default: False).', required=False)
 args = parser.parse_args()
 
+if args.prune_weight < 0:
+    parser.error("--prune-weight must not be negative.")
+if args.prune_weight > 0 and args.fst is None:
+    parser.error("--prune-weight > 0 is not supported by the built-in model yet (work in progress).")
+if args.events and args.fst is None:
+    parser.error("--events is not available for the built-in model yet.")
+if args.fst is not None and args.events:
+    parser.error("--events cannot be combined with --fst: an arbitrary FST has no event labels.")
 
 if args.verbose:
     logging.getLogger('medicc').setLevel(logging.INFO)
@@ -163,10 +173,11 @@ else:
 
 # Read in symbol table and transducers
 logger.info("Reading FST.")
+if args.wgd_x2:
+    logger.info("--wgd-x2 has no effect: the built-in model always treats WGD as x2.")
 fst = medicc.io.read_fst(user_fst=args.fst, 
                          no_wgd=args.no_wgd,
-                         total_copy_numbers=args.total_copy_numbers,
-                         wgd_x2=args.wgd_x2)
+                         total_copy_numbers=args.total_copy_numbers)
 
 if args.user_tree is not None:
     logger.info("Importing user tree.")
@@ -246,7 +257,7 @@ logger.info("Writing trees.")
 #     output_dir, output_prefix + "_nj_tree"))
 medicc.io.write_tree_files(tree=final_tree, normal_name=normal_name, out_name=os.path.join(
     output_dir, output_prefix + "_final_tree"), plot_tree=(not args.no_plot_tree))
-medicc.io.write_branch_lengths(tree=final_tree, out_name=os.path.join(
+medicc.io.write_branch_lengths(tree=final_tree, normal_name=normal_name, out_name=os.path.join(
     output_dir, output_prefix + "_branch_lengths.tsv"))
 
 # Write ouput table
