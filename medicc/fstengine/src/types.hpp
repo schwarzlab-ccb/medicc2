@@ -28,6 +28,10 @@ struct Message {
     double offset = 0;
     int length = 0;
 };
+struct Model {
+    Vec a, ad;
+    int max_wgds = 2;
+};
 // struct SuffixData;
 // struct Model {
 //     Vec a, ad, a_even, loss, gain, doubling;
