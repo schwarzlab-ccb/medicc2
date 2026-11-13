@@ -637,17 +637,22 @@ Run the full suite after Phase 5.
 C++17, `-O3`, link `fst`, same include/lib/rpath handling. It is loaded by ctypes, not imported.
 **Test:** `rm -f medicc/fstengine/_fstengine*.so && python setup.py build_ext --inplace && python -B tests/migration/test_11_fstengine_vs_oracle.py`.
 
-## Step 13: `pyproject.toml` — ship the new files
+## Step 13: `setup.py` — ship the new files
 
 **Files** (paths from NEW's root)
 
-* **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/pyproject.toml`
-* **Edit in NEW:** `pyproject.toml`
-* **Test:** a one-line check, see below
+* **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/pyproject.toml` (only its `packages` and `package-data`)
+* **Edit in NEW:** `setup.py` (`pyproject.toml` stays as it is)
+* **Test:** build a wheel and look inside, see below
 
 **Problem.** `pip install .` would leave out `medicc.fstengine`, the `.hpp` files and `ancestral_parts.txt`.
-**Idea.** Add `medicc.fstengine` to packages; package data `objects/*.txt` and `"medicc.fstengine" = ["src/*.hpp", "src/*.cpp"]`. Keep the pytest block.
-**Test:** `python -c "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); assert 'medicc.fstengine' in d['tool']['setuptools']['packages']"`.
+**Idea.** In `setup.py`: add `'medicc.fstengine'` to `packages`; in `package_data` add `"objects/*.txt"` to `"medicc"` and a new entry `"medicc.fstengine": ["src/*.hpp", "src/*.cpp"]`.
+The metadata stays in `setup.py`, as in master. REF moved all of it into `pyproject.toml` (`[project]`); that is a clean-up, not needed to build or ship.
+**Test:**
+
+```bash
+pip wheel . --no-deps --no-build-isolation -w /tmp/wheel -q && python -c "import zipfile,glob; n=zipfile.ZipFile(glob.glob('/tmp/wheel/*.whl')[0]).namelist(); assert 'medicc/fstengine/model.py' in n and 'medicc/objects/ancestral_parts.txt' in n; print('PASS step 13')"
+```
 
 ## Step 14: `medicc/fstengine/scheduler.py` — many pairs, many threads
 
@@ -749,7 +754,9 @@ print("PASS step 16")
 * **Edit in NEW:** `medicc/core.py`
 * **Test:** create `tests/migration/test_17_core.py`; copy `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/test_data/meso5.tsv` and `meso5.new` into `medicc/test_data/`
 
-**Idea.** In `main`: if the model is a `ModelConfig`, use strings (`create_cn_str_dict`), engine distances, engine reconstruction, engine branch lengths (`reconstructed_tree_length`), and turn strings back into a table (`create_df_from_cn_str_dict`). Reject `prune_weight > 0` (`_check_fstengine_options`). Keep the six return values. Keep master's FSA path for a custom FST.
+**Idea.** In `main`: if the model is a `ModelConfig`, use strings (`create_cn_str_dict`), engine distances, engine reconstruction, engine branch lengths (`update_branch_lengths` with directed engine scores), and turn strings back into a table (`create_df_from_cn_str_dict`). Reject `prune_weight > 0` (`_check_fstengine_options`). Keep the six return values. Keep master's FSA path for a custom FST.
+**Events are off until Phase 6:** `reconstruct_events=True` raises `MEDICCError` (engine: "not available yet"; custom FST: never, it has no event labels). Master's event code needs the old `read_fst(n_wgd=..., wgd_x2=...)`, which Step 15 removed; Step 34 brings events back.
+Not yet: `reconstructed_tree_length` (NNI, Steps 36–37), FastME (Steps 38–40). Keep `main`'s `chr_separator` and `wgd_x2` arguments for now (`bootstrap.py` and `medicc2` still pass them). Delete `detect_wgd` (it used the removed `read_fst` options).
 Type it in two turns: (a) the string/table helpers, (b) `main`.
 **Test:** `tests/migration/test_17_core.py` — take `meso5.tsv` and `meso5.new` from REF (raw input data, allowed):
 
@@ -786,7 +793,7 @@ One line. **Test:** `python -c "import medicc; medicc.fstengine.ModelConfig()"`.
 * **Test:** two CLI runs, see below
 
 **Idea.** By default call `read_fst(no_wgd=..., total_copy_numbers=...)`. `--fst PATH` = custom fstlib model.
-`--prune-weight > 0` with the engine fails early with a clear message. Keep all other options.
+`--prune-weight > 0` and `--events` with the engine fail early with a clear message (events: "not available yet", until Step 34). `--wgd-x2` only logs that it has no effect. Pass `normal_name` to `write_branch_lengths`. Keep all other options.
 **Test:**
 
 ```bash
@@ -817,12 +824,14 @@ Both run. The second one must give master's old numbers.
 * **Test:** pytest, see below
 
 **Problem.** Some integration tests check old default outputs.
-**Idea.** For each test that fails: is it a **format** difference (accept) or a **meaning** difference (the new model, on purpose)?
+**Idea.** In Phase 4 only one change: `test_medicc_distance_speed_up` calls `calc_MED_distance`, which needs an fstlib FST, so it loads `medicc/objects/wgd_asymm.fst` explicitly (`read_fst(user_fst=...)`).
+All other tests here run `medicc2 --events`, which is off until Step 34. Their numbers (REF: `is_gain` 176, `is_loss` 210 for `testing_example`) and the rule below come back in Step 34.
+For each test that fails: is it a **format** difference (accept) or a **meaning** difference (the new model, on purpose)?
 Compare the new number with REF's result for the same input (same model, so it should match).
 Write each changed number in the commit message: test name, old value, new value, why.
-**Test:** `python -m pytest medicc/test_medicc.py -q -k 'not gundem and not ipynb' --timeout=900`.
+**Test (Phase 4):** `python -m pytest medicc/test_medicc.py -q -k '(help_box or distance_speed_up or bootstrap) and not ipynb' --timeout=900`.
 
-**Milestone:** MEDICC runs your engine by default, on real data.
+**Milestone:** MEDICC runs your engine by default, on real data (without events until Phase 6).
 
 ---
 
@@ -1164,6 +1173,7 @@ print("PASS step 33")
 **Idea.** Split each loss/gain stage into unit interval events (`_unit_intervals`, `_fstengine_stage_events`). A WGD stage = one genome-wide event.
 Check: replaying the events gives the child, and the number of events = branch length.
 Also fix: two WGDs with the same index must both stay in the BED overlap output.
+**Switch events back on** (off since Step 17): remove the "not available yet" error in `core.main` and in `medicc2` (keep the one for a custom FST). Then run all of `medicc/test_medicc.py` (`-k 'not gundem and not ipynb'`) and update its event numbers as described in Step 21.
 **Test:**
 
 ```python

@@ -30,13 +30,13 @@ setup(
     description='Whole-genome doubling-aware copy number phylogenies for cancer evolution',
     long_description=(Path(__file__).parent / "README.md").read_text(),
     long_description_content_type='text/markdown',
-    url='https://bitbucket.org/schwarzlab/medicc2',
+    url='https://github.com/schwarzlab-ccb/medicc2',
     classifiers=[
                 "Programming Language :: Python :: 3",
                 "License :: OSI Approved :: MIT License",
                 "Operating System :: OS Independent",
     ],
-    packages=['medicc', 'fstlib', 'fstlib.cext'],
+    packages=['medicc', 'medicc.fstengine', 'fstlib', 'fstlib.cext'],
     scripts=['medicc2'],
     license='GPL-3',
     python_requires='>=3.12',
@@ -52,7 +52,8 @@ setup(
         'Parallelization': ['joblib>=1.0.1'],
     },
     package_data={
-        "medicc": ["objects/*.fst", "objects/*.bed", "logging_conf.yaml"],
+        "medicc": ["objects/*.fst", "objects/*.bed", "objects/*.txt", "logging_conf.yaml"],
+        "medicc.fstengine": ["src/*.hpp", "src/*.cpp"],
         "fstlib": ["logging_conf.yaml", "cext/*.pxd", "cext/*.pyx", "cext/*.h"],
     },
     ext_modules = cythonize([
