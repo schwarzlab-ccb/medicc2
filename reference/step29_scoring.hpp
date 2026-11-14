@@ -89,30 +89,30 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
 // The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).
 static double score(Model &m, const std::string &x, const std::string &y, bool directed) {
     compatible(x, y);
-    // One segment per chromosome (the X itself is dropped: A and AD restart there). Inside a
+    // One entry per chromosome (the X itself is dropped: A and AD restart there). Inside a
     // chromosome, a column equal to the previous one in BOTH strings is dropped too: the
     // events that change the previous column can always cover it at no extra cost.
-    std::vector<std::pair<std::string, std::string>> segments(1);
+    std::vector<std::pair<std::string, std::string>> chromosomes(1);
     for (size_t i = 0; i < x.size(); ++i) {
         if (x[i] == 'X') {
-            segments.emplace_back();
+            chromosomes.emplace_back();
             continue;
         }
-        auto &s = segments.back();
+        auto &s = chromosomes.back();
         if (s.first.empty() || s.first.back() != x[i] || s.second.back() != y[i]) {
             s.first += x[i];
             s.second += y[i];
         }
     }
-    // Shortest first: cheap segments use up the budget early and stop a hopeless (k, j) sooner.
-    std::stable_sort(segments.begin(), segments.end(),
+    // Shortest first: cheap chromosomes use up the budget early and stop a hopeless (k, j) sooner.
+    std::stable_sort(chromosomes.begin(), chromosomes.end(),
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
-    // Per segment and WGD choice (branch = 3k + j): a lower bound and the cost of one real
+    // Per chromosome and WGD choice (branch = 3k + j): a lower bound and the cost of one real
     // history (witness). Both equal: the exact score, cached without a search.
-    std::vector<BlockBounds> bounds(segments.size());
-    for (size_t i = 0; i < segments.size(); ++i) {
+    std::vector<ChromosomeBounds> bounds(chromosomes.size());
+    for (size_t i = 0; i < chromosomes.size(); ++i) {
         bounds[i].upper.fill(infinity);
-        auto &[a, b] = segments[i];
+        auto &[a, b] = chromosomes[i];
         for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
             for (int j = 0; j <= m.max_wgds; ++j) {
                 int branch = 3 * k + j;
@@ -135,25 +135,25 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     for (auto [lower, branch] : branches) {
         if (lower >= best) // a scalar needs a strictly better branch
             continue;
-        // bound: a lower bound of this branch that becomes exact segment by segment
+        // bound: a lower bound of this branch that becomes exact chromosome by chromosome
         double bound = lower;
         int k = branch / 3, j = branch % 3;
-        for (size_t i = 0; i < segments.size(); ++i) {
+        for (size_t i = 0; i < chromosomes.size(); ++i) {
             if (bound >= best)
                 break;
-            // other = the rest of this branch: segments done + lower bounds of those to come.
+            // other = the rest of this branch: chromosomes done + lower bounds of those to come.
             double before = bounds[i].lower[branch], other = bound - before;
-            // Integral costs: only a strict improvement is needed for a scalar. This segment
+            // Integral costs: only a strict improvement is needed for a scalar. This chromosome
             // only matters if it costs <= best - other - 1, and its witness already costs upper,
             // so ask only for <= upper - 1.
             // >>> Step 29: change 1 line (was 1)
             double room = std::min(best - other - 1, bounds[i].upper[branch] - 1);
-            double value = fixed(m, segments[i].first, segments[i].second, k, j, directed, room);
+            double value = fixed(m, chromosomes[i].first, chromosomes[i].second, k, j, directed, room);
             // Nothing cheaper than the witness: the witness cost IS the exact score (certified).
             // >>> Step 29: add 5 lines
             if (!std::isfinite(value) && room == bounds[i].upper[branch] - 1) {
                 value = bounds[i].upper[branch];
-                cache_score(m, score_key(segments[i].first, segments[i].second, k, j, directed),
+                cache_score(m, score_key(chromosomes[i].first, chromosomes[i].second, k, j, directed),
                             value);
             }
             // <<< Step 29

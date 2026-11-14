@@ -11,7 +11,7 @@ int main() {
     assert(!std::isfinite(fixed(m, "22", "11", 0, 0, false, 0)));
     assert(m.chromosome_scores.empty()); // ... and that is not cached
     assert(score(m, "22", "11", false) == 1);
-    // score() drops the repeated column, so the segment is "2" / "1". Its witness (one loss)
+    // score() drops the repeated column, so the chromosome is "2" / "1". Its witness (one loss)
     // costs 1 and nothing cheaper exists: the answer is cached (certified, or lower == upper).
     assert(m.chromosome_scores.count(score_key("2", "1", 0, 0, false)) == 1);
     assert(m.chromosome_scores.at(score_key("2", "1", 0, 0, false)) == 1);

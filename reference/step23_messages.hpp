@@ -2,7 +2,7 @@
 // REFERENCE for migration Step 23 (not part of REF's code). Goes to medicc/fstengine/src/messages.hpp.
 // Markers: ">>> Step 23" new or changed code, ending at "<<< Step 23" (one-line changes have no end); "--- Step 23" code to remove.
 // Your Step 8 file + slice() / split() (copied from REF's messages.hpp), and join() / resolve()
-// search block by block. Left out until later steps:
+// search chromosome by chromosome. Left out until later steps:
 //   bounds: message_bounds, branch_order, the `remaining` / `lower` pruning (Step 26)
 //   make_graph / branch_graph move to astar.hpp (Step 27)
 //
@@ -82,22 +82,24 @@ static Message slice(const Message &m, const Layers &ls, int begin, int end) {
     return out;
 }
 
-// Cut two equally long messages into independent blocks (pairs of slices).
+// Cut two equally long messages into chromosomes (pairs of slices). Neighbouring chromosomes
+// whose paths are linked (more than one state at the X between them) stay in one piece.
 static std::vector<std::pair<Message, Message>> split(const Message &l, const Message &r) {
 // <<< Step 23
     if (l.length != r.length)
         throw std::runtime_error("Length mismatch");
     // >>> Step 23: add 20 lines
-    auto a = layers(l), b = layers(r);
+    auto l_layers = layers(l), r_layers = layers(r);
     std::vector<std::pair<Message, Message>> parts;
     int begin = 0;
     for (int end = 1; end <= l.length; ++end) {
         // A unique state on each side after X proves independence; otherwise
-        // keep the correlations by leaving the block whole.
-        if (end != l.length && !(a.states[end].size() == 1 && b.states[end].size() == 1 &&
-                                 a.after_x[end] && b.after_x[end]))
+        // keep the correlations by keeping these chromosomes together.
+        if (end != l.length &&
+            !(l_layers.states[end].size() == 1 && r_layers.states[end].size() == 1 &&
+              l_layers.after_x[end] && r_layers.after_x[end]))
             continue;
-        parts.emplace_back(slice(l, a, begin, end), slice(r, b, begin, end));
+        parts.emplace_back(slice(l, l_layers, begin, end), slice(r, r_layers, begin, end));
         begin = end;
     }
     if (l.length == 0)
@@ -106,10 +108,10 @@ static std::vector<std::pair<Message, Message>> split(const Message &l, const Me
 }
 
 // Bottom-up: the language of all minimum-cost common ancestors of l and r.
-// Tries every WGD count pair (k, j); for each, searches the blocks one by one and adds.
+// Tries every WGD count pair (k, j); for each, searches the chromosomes one by one and adds.
 static Message join(Model &m, const Message &l, const Message &r) {
     auto parts = split(l, r);
-    // Shortest blocks first: a cheap block uses up the budget early and stops a hopeless
+    // Shortest chromosomes first: a cheap chromosome uses up the budget early and stops a hopeless
     // (k, j) sooner.
     std::vector<int> order(parts.size());
     std::iota(order.begin(), order.end(), 0);
@@ -123,10 +125,10 @@ static Message join(Model &m, const Message &l, const Message &r) {
         for (int j = 0; j <= m.max_wgds; ++j) {
             // >>> Step 23: change 14 lines (was 4)
             double total = k + j;
-            std::vector<Vec> blocks(parts.size());
+            std::vector<Vec> chromosomes(parts.size());
             bool feasible = true;
             for (int i : order) {
-                // Every block costs >= 0, so this block may use at most best - total.
+                // Every chromosome costs >= 0, so this one may use at most best - total.
                 // search() keeps states equal to the cap, so ties survive.
                 auto graph = make_graph(m, parts[i].first, parts[i].second, k, j, false);
                 auto result = search(*graph, best - total, true);
@@ -135,15 +137,15 @@ static Message join(Model &m, const Message &l, const Message &r) {
                     break;
                 }
                 total += result.cost;
-                blocks[i] = canonical(std::move(result.tight));
+                chromosomes[i] = canonical(std::move(result.tight));
             }
             if (!feasible)
             // <<< Step 23
                 continue;
             // >>> Step 23: change 3 lines (was 1)
-            Vec language = std::move(blocks[0]); // blocks back in profile order
-            for (size_t i = 1; i < blocks.size(); ++i)
-                fst::Concat(&language, blocks[i]);
+            Vec language = std::move(chromosomes[0]); // chromosomes back in profile order
+            for (size_t i = 1; i < chromosomes.size(); ++i)
+                fst::Concat(&language, chromosomes[i]);
             // <<< Step 23
             if (total < best) {
                 combined.DeleteStates();

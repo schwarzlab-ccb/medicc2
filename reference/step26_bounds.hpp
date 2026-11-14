@@ -176,12 +176,12 @@ static double language_lower(const std::vector<int> &left,
     }
     return total;
 }
-struct BlockBounds {
+struct ChromosomeBounds {
     std::array<double, 9> lower{}, upper{};
 };
-static std::vector<BlockBounds>
+static std::vector<ChromosomeBounds>
 message_bounds(Model &model, const std::vector<std::pair<Message, Message>> &parts, bool directed) {
-    std::vector<BlockBounds> out(parts.size());
+    std::vector<ChromosomeBounds> out(parts.size());
     for (size_t i = 0; i < parts.size(); ++i) {
         auto &bounds = out[i];
         bounds.upper.fill(infinity);
@@ -199,15 +199,15 @@ message_bounds(Model &model, const std::vector<std::pair<Message, Message>> &par
     return out;
 }
 static std::vector<std::pair<double, int>>
-branch_order(Model &model, const std::vector<BlockBounds> &blocks, bool directed, double &best) {
+branch_order(Model &model, const std::vector<ChromosomeBounds> &chromosomes, bool directed, double &best) {
     std::vector<std::pair<double, int>> order;
     for (int k = 0; k <= (directed ? 0 : model.max_wgds); ++k)
         for (int j = 0; j <= model.max_wgds; ++j) {
             int branch = 3 * k + j;
             double lower = k + j, upper = k + j;
-            for (auto &block : blocks) {
-                lower += block.lower[branch];
-                upper += block.upper[branch];
+            for (auto &chromosome : chromosomes) {
+                lower += chromosome.lower[branch];
+                upper += chromosome.upper[branch];
             }
             if (upper < best)
                 best = upper;

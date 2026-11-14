@@ -2,7 +2,7 @@
 // REFERENCE for migration Step 26 (not part of REF's code). Goes to medicc/fstengine/src/scoring.hpp.
 // Markers: ">>> Step 26" new or changed code, ending at "<<< Step 26" (one-line changes have no end); "--- Step 26" code to remove.
 // Step 24's file; score() now uses the bounds of bounds.hpp. It is REF's score() with one change:
-// the cap of a segment is room = min(best - other, upper), not min(best - other - 1, upper - 1),
+// the cap of a chromosome is room = min(best - other, upper), not min(best - other - 1, upper - 1),
 // and there is no "certify" branch. Left out until later steps:
 //   pair filter + A*: make_pair_graph  (Step 27);  greedy_pair, room = ... - 1, certify  (Step 29)
 
@@ -44,31 +44,31 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
 // The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).
 static double score(Model &m, const std::string &x, const std::string &y, bool directed) {
     compatible(x, y);
-    // One segment per chromosome (the X itself is dropped: A and AD restart there). Inside a
+    // One entry per chromosome (the X itself is dropped: A and AD restart there). Inside a
     // chromosome, a column equal to the previous one in BOTH strings is dropped too: the
     // events that change the previous column can always cover it at no extra cost.
-    std::vector<std::pair<std::string, std::string>> segments(1);
+    std::vector<std::pair<std::string, std::string>> chromosomes(1);
     for (size_t i = 0; i < x.size(); ++i) {
         if (x[i] == 'X') {
-            segments.emplace_back();
+            chromosomes.emplace_back();
             continue;
         }
-        auto &s = segments.back();
+        auto &s = chromosomes.back();
         if (s.first.empty() || s.first.back() != x[i] || s.second.back() != y[i]) {
             s.first += x[i];
             s.second += y[i];
         }
     }
-    // Shortest first: cheap segments use up the budget early and stop a hopeless (k, j) sooner.
-    std::stable_sort(segments.begin(), segments.end(),
+    // Shortest first: cheap chromosomes use up the budget early and stop a hopeless (k, j) sooner.
+    std::stable_sort(chromosomes.begin(), chromosomes.end(),
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
-    // Per segment and WGD choice (branch = 3k + j): a lower bound and the cost of one real
+    // Per chromosome and WGD choice (branch = 3k + j): a lower bound and the cost of one real
     // history (witness). Both equal: the exact score, cached without a search.
     // >>> Step 26: change 4 lines (was 1)
-    std::vector<BlockBounds> bounds(segments.size());
-    for (size_t i = 0; i < segments.size(); ++i) {
+    std::vector<ChromosomeBounds> bounds(chromosomes.size());
+    for (size_t i = 0; i < chromosomes.size(); ++i) {
         bounds[i].upper.fill(infinity);
-        auto &[a, b] = segments[i];
+        auto &[a, b] = chromosomes[i];
     // <<< Step 26
         for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
             for (int j = 0; j <= m.max_wgds; ++j) {
@@ -93,18 +93,18 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     for (auto [lower, branch] : branches) {
         if (lower >= best) // a scalar needs a strictly better branch
             continue;
-        // bound: a lower bound of this branch that becomes exact segment by segment
+        // bound: a lower bound of this branch that becomes exact chromosome by chromosome
         double bound = lower;
         int k = branch / 3, j = branch % 3;
-        for (size_t i = 0; i < segments.size(); ++i) {
+        for (size_t i = 0; i < chromosomes.size(); ++i) {
             if (bound >= best)
                 break;
-            // other = the rest of this branch: segments done + lower bounds of those to come.
+            // other = the rest of this branch: chromosomes done + lower bounds of those to come.
             double before = bounds[i].lower[branch], other = bound - before;
-            // This segment may use at most best - other. Its witness costs upper, so a
+            // This chromosome may use at most best - other. Its witness costs upper, so a
             // search with cap upper always finds the exact score.
             double room = std::min(best - other, bounds[i].upper[branch]);
-            double value = fixed(m, segments[i].first, segments[i].second, k, j, directed, room);
+            double value = fixed(m, chromosomes[i].first, chromosomes[i].second, k, j, directed, room);
             if (!std::isfinite(value)) {
                 bound = infinity;
                 // <<< Step 26

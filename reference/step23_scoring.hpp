@@ -4,7 +4,7 @@
 // Your Step 9 file; score() now splits the strings at X and adds chromosome scores.
 // Left out until later steps:
 //   score cache: score_key / cached_score / cache_score, the x > y swap in fixed()  (Step 24)
-//   bounds and branch order: BlockBounds, string_lower, witness, branch_order  (Step 26)
+//   bounds and branch order: ChromosomeBounds, string_lower, witness, branch_order  (Step 26)
 //   pair filter + A*: make_pair_graph  (Step 27);  greedy_pair, room = ... - 1  (Step 29)
 
 #include <algorithm>
@@ -35,24 +35,24 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
 // The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).
 static double score(Model &m, const std::string &x, const std::string &y, bool directed) {
     compatible(x, y);
-    // One segment per chromosome (the X itself is dropped: A and AD restart there). Inside a
+    // One entry per chromosome (the X itself is dropped: A and AD restart there). Inside a
     // chromosome, a column equal to the previous one in BOTH strings is dropped too: the
     // events that change the previous column can always cover it at no extra cost.
     // >>> Step 23: add 14 lines
-    std::vector<std::pair<std::string, std::string>> segments(1);
+    std::vector<std::pair<std::string, std::string>> chromosomes(1);
     for (size_t i = 0; i < x.size(); ++i) {
         if (x[i] == 'X') {
-            segments.emplace_back();
+            chromosomes.emplace_back();
             continue;
         }
-        auto &s = segments.back();
+        auto &s = chromosomes.back();
         if (s.first.empty() || s.first.back() != x[i] || s.second.back() != y[i]) {
             s.first += x[i];
             s.second += y[i];
         }
     }
-    // Shortest first: cheap segments use up the budget early and stop a hopeless (k, j) sooner.
-    std::stable_sort(segments.begin(), segments.end(),
+    // Shortest first: cheap chromosomes use up the budget early and stop a hopeless (k, j) sooner.
+    std::stable_sort(chromosomes.begin(), chromosomes.end(),
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
     // <<< Step 23
     double best = infinity;
@@ -60,8 +60,8 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
         // >>> Step 23: change 9 lines (was 2)
         for (int j = 0; j <= m.max_wgds; ++j) {
             double total = k + j;
-            for (auto &[a, b] : segments) {
-                // Every segment costs >= 0: this one may use at most best - total.
+            for (auto &[a, b] : chromosomes) {
+                // Every chromosome costs >= 0: this one may use at most best - total.
                 total += fixed(m, a, b, k, j, directed, best - total);
                 if (!std::isfinite(total))
                     break;

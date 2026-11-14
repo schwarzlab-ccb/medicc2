@@ -59,20 +59,22 @@ static Message slice(const Message &m, const Layers &ls, int begin, int end) {
     return out;
 }
 
-// Cut two equally long messages into independent blocks (pairs of slices).
+// Cut two equally long messages into chromosomes (pairs of slices). Neighbouring chromosomes
+// whose paths are linked (more than one state at the X between them) stay in one piece.
 static std::vector<std::pair<Message, Message>> split(const Message &l, const Message &r) {
     if (l.length != r.length)
         throw std::runtime_error("Length mismatch");
-    auto a = layers(l), b = layers(r);
+    auto l_layers = layers(l), r_layers = layers(r);
     std::vector<std::pair<Message, Message>> parts;
     int begin = 0;
     for (int end = 1; end <= l.length; ++end) {
         // A unique state on each side after X proves independence; otherwise
-        // keep the correlations by leaving the block whole.
-        if (end != l.length && !(a.states[end].size() == 1 && b.states[end].size() == 1 &&
-                                 a.after_x[end] && b.after_x[end]))
+        // keep the correlations by keeping these chromosomes together.
+        if (end != l.length &&
+            !(l_layers.states[end].size() == 1 && r_layers.states[end].size() == 1 &&
+              l_layers.after_x[end] && r_layers.after_x[end]))
             continue;
-        parts.emplace_back(slice(l, a, begin, end), slice(r, b, begin, end));
+        parts.emplace_back(slice(l, l_layers, begin, end), slice(r, r_layers, begin, end));
         begin = end;
     }
     if (l.length == 0)
@@ -83,8 +85,8 @@ static std::vector<std::pair<Message, Message>> split(const Message &l, const Me
 // Bottom-up: the language of all minimum-cost common ancestors of l and r.
 // Bounds (bounds.hpp) order the WGD choices from the lowest lower bound and drop a choice, or
 // stop it early, once its lower bound is STRICTLY worse than the best cost: equal choices are
-// kept, because their ancestors are optimal too. `remaining` = lower bounds of the blocks not
-// searched yet; a block may use at most best - total - remaining.
+// kept, because their ancestors are optimal too. `remaining` = lower bounds of the chromosomes not
+// searched yet; a chromosome may use at most best - total - remaining.
 static Message join(Model &m, const Message &l, const Message &r) {
     auto parts = split(l, r);
     auto bounds = message_bounds(m, parts, false);
@@ -100,7 +102,7 @@ static Message join(Model &m, const Message &l, const Message &r) {
             continue; // Equality must retain all optimal words.
         int k = branch / 3, j = branch % 3;
         double total = k + j, remaining = lower - total;
-        std::vector<Vec> blocks(parts.size());
+        std::vector<Vec> chromosomes(parts.size());
         bool feasible = true;
         for (int i : order) {
             remaining -= bounds[i].lower[branch];
@@ -116,13 +118,13 @@ static Message join(Model &m, const Message &l, const Message &r) {
                 break;
             }
             total += result.cost;
-            blocks[i] = canonical(std::move(result.tight));
+            chromosomes[i] = canonical(std::move(result.tight));
         }
         if (!feasible)
             continue;
-        Vec language = std::move(blocks[0]);
-        for (size_t i = 1; i < blocks.size(); ++i)
-            fst::Concat(&language, blocks[i]);
+        Vec language = std::move(chromosomes[0]);
+        for (size_t i = 1; i < chromosomes.size(); ++i)
+            fst::Concat(&language, chromosomes[i]);
         if (total < best) {
             combined.DeleteStates();
             best = total;

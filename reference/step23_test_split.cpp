@@ -1,20 +1,20 @@
 // REFERENCE for migration Step 23 (not part of REF's code). Goes to tests/migration/test_23_split.cpp.
-// The plan's test, plus empty chromosomes ("1XX2") and a check that split blocks add up.
+// The plan's test, plus empty chromosomes ("1XX2") and a check that the split chromosomes add up.
 // Run: ./test_fstengine.sh 23
 #include <cassert>
 #include "medicc/fstengine/src/fstengine.cpp"
 
 int main() {
     Message a{linear("1X2"), 0, 3}, b{linear("2X3"), 0, 3};
-    auto blocks = split(a, b);
-    assert(blocks.size() == 2);
-    assert(blocks[0].first.length == 2 && blocks[1].first.length == 1); // "1X" | "2"
+    auto chromosomes = split(a, b);
+    assert(chromosomes.size() == 2);
+    assert(chromosomes[0].first.length == 2 && chromosomes[1].first.length == 1); // "1X" | "2"
 
-    // Empty chromosome: a cut after each X, the middle block is just "X".
+    // Empty chromosome: a cut after each X, the middle chromosome is just "X".
     Message c{linear("1XX2"), 0, 4}, d{linear("2XX3"), 0, 4};
-    blocks = split(c, d);
-    assert(blocks.size() == 3);
-    assert(blocks[1].first.length == 1);
+    chromosomes = split(c, d);
+    assert(chromosomes.size() == 3);
+    assert(chromosomes[1].first.length == 1);
 
     void *model = fstengine_load("medicc/objects/ancestral_parts.txt", 0);
     assert(model);
