@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "types.hpp"
 #include "fst_operations.hpp"
@@ -20,12 +22,40 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
     return search(*graph, cap, false).cost;
 }
 
-// The minimum over all WGD choices, plus the WGD charge k + j
+// The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).
 static double score(Model &m, const std::string &x, const std::string &y, bool directed) {
     compatible(x, y);
+    // One entry per chromosome: [(chr_1_x, chr_1_y), (chr_2_x, chr_2_y), ...] (the X is dropped:
+    // A and AD restart there). Inside a chromosome, a column equal to the previous one in BOTH
+    // strings is dropped too: the events that change the previous column can cover it at no
+    // extra cost.
+    std::vector<std::pair<std::string, std::string>> chromosomes(1);
+    for (size_t i = 0; i < x.size(); ++i) {
+        if (x[i] == 'X') {
+            chromosomes.emplace_back();
+            continue;
+        }
+        auto &s = chromosomes.back();
+        if (s.first.empty() || s.first.back() != x[i] || s.second.back() != y[i]) {
+            s.first += x[i];
+            s.second += y[i];
+        }
+    }
+    // Shortest first: cheap chromosomes use up the budget early and stop a hopeless (k, j) sooner.
+    std::stable_sort(chromosomes.begin(), chromosomes.end(),
+                     [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
+
     double best = infinity;
     for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
-        for (int j = 0; j <= m.max_wgds; ++j)
-            best = std::min(best, k + j + fixed(m, x, y, k, j, directed, best - k - j));
+        for (int j = 0; j <= m.max_wgds; ++j) {
+            double total = k + j;
+            for (auto &[a, b]: chromosomes) {
+                // Every chromosome costs >= 0: this one may use at most best - total
+                total += fixed(m, a, b, k, j, directed, best - total);
+                if (!std::isfinite(total))
+                    break;
+            }
+            best = std::min(best, total);
+        }
     return best;
 }

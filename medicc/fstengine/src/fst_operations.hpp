@@ -1,6 +1,6 @@
 #pragma once
 
-// Symbol mapping, linear acceptors for CN strings, the layer decomposition of
+// Symbol mapping, linear acceptors for CN strings, the layer decomposition of a
 // fixed-length message and delayed (lazy) OpenFST composition helpers
 
 #include "types.hpp"
@@ -42,7 +42,43 @@ static void compatible(const std::string &x, const std::string &y) {
             throw std::runtime_error("Separator mismatch");
     }
 }
-//TODO: add layers struct and static layers here
+// The states of a fixed-length message, layer by layer: states[d] = states after d symbols
+// after_x[d]: every arc into layer d reads X (d > 0), so layer d starts a new chromosome.
+// split() (messages.hpp) cuts two messages where both have one state after an X.
+struct Layers {
+    std::vector<std::vector<int>> states;
+    std::vector<int> depth;
+    std::vector<bool> after_x;
+};
+static Layers layers(const Message &m) {
+    Layers out;
+    out.states.resize(m.length + 1);
+    out.depth.assign(m.fst.NumStates(), -1);
+    out.after_x.assign(m.length + 1, true);
+    if (m.fst.Start() < 0)
+        throw std::runtime_error("Empty message");
+    out.states[0].push_back(m.fst.Start());
+    out.depth[m.fst.Start()] = 0;
+    out.after_x[0] = false;
+    for (int d = 0; d <= m.length; ++d)
+        for (int state : out.states[d]) {
+            if (m.fst.Final(state) != W::Zero() && d != m.length)
+                throw std::runtime_error("Message is not fixed length");
+            for (fst::ArcIterator<Vec> it(m.fst, state); !it.Done(); it.Next()) {
+                const auto &a = it.Value();
+                if (d == m.length || a.ilabel != a.olabel || a.ilabel < 1 || a.ilabel > 10)
+                    throw std::runtime_error("Invalid message arc");
+                if (a.ilabel != 10) // "X"
+                    out.after_x[d + 1] = false;
+                if (out.depth[a.nextstate] < 0) {
+                    out.depth[a.nextstate] = d + 1;
+                    out.states[d + 1].push_back(a.nextstate);
+                } else if (out.depth[a.nextstate] != d + 1)
+                    throw std::runtime_error("Message has inconsistent path lengths");
+            }
+        }
+    return out;
+}
 static Ptr sorted(const Fst &f) {
     return std::make_unique<fst::ArcSortFst<Arc, fst::ILabelCompare<Arc>>>(
         f, fst::ILabelCompare<Arc>());

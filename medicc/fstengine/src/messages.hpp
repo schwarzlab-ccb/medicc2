@@ -4,12 +4,22 @@
 // join() bottom-up: the best common ancestors of two child messages (all ties kept)
 // resolve() top-down: one best child profile for a fixed parent profile
 
+// Optimization idea 1 -- Split at chromosomes
+// A and AD restart at every X, so for a FIXED WGD choice (k, j) the cost of a profile
+// is the sum of its chromosome costs. Two messages can be cut after an X where BOTH have
+// exactly one state: then the pieces before and after are independent. Each piece is searched
+// alone; the languages are concatenated back. The WGD choice is never made per piece: one (k, j)
+// for the whole genome, charged once.
+
 #include <cmath>
 #include <memory>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
+#include <fst/concat.h>
 #include <fst/project.h>
 #include <fst/union.h>
 
@@ -38,32 +48,94 @@ static Ptr make_graph(Model &m, const Message &left, const Message &right, int k
     return compose(*l, *r); // ComposeFst keeps its own copies of l and r
 }
 
+// The columns begin..end of a message as a message of its own (layers from fst_operations.hpp)
+static Message slice(const Message &m, const Layers &ls, int begin, int end) {
+    Message out;
+    out.length = end - begin;
+    std::vector<int> ids(m.fst.NumStates(), -1);
+    for (int d = begin; d <= end; ++d)
+        for (int s : ls.states[d])
+            ids[s] = out.fst.AddState();
+    out.fst.SetStart(ids[ls.states[begin].at(0)]);
+    for (int d = begin; d <= end; ++d)
+        for (int s : ls.states[d]) {
+            if (d == end) {
+                out.fst.SetFinal(ids[s], end == m.length ? m.fst.Final(s) : W::One());
+                continue;
+            }
+            for (fst::ArcIterator<Vec> it(m.fst, s); !it.Done(); it.Next()) {
+                auto a = it.Value();
+                a.nextstate = ids[a.nextstate];
+                out.fst.AddArc(ids[s], a);
+            }
+        }
+    return out;
+}
+
+// Cut l and r into pairs of slices, one per chromosome. Neighbouring chromosomes whose paths
+// are linked (more than one state after the X) stay in one pair.
+static std::vector<std::pair<Message, Message>> split(const Message &l, const Message &r) {
+    if (l.length != r.length)
+        throw std::runtime_error("Length mismatch");
+    auto l_layers = layers(l), r_layers = layers(r);
+    std::vector<std::pair<Message, Message>> parts;
+    int begin = 0;
+    for (int end = 1; end <= l.length; ++end) {
+        // Cut only after an X where both sides have exactly one state
+        if (end != l.length &&
+            !(l_layers.states[end].size() == 1 && r_layers.states[end].size() == 1 &&
+              l_layers.after_x[end] && r_layers.after_x[end]))
+            continue;
+        parts.emplace_back(slice(l, l_layers, begin, end), slice(r, r_layers, begin, end));
+        begin = end;
+    }
+    if (l.length == 0)
+        parts.emplace_back(l, r);
+    return parts;
+}
+
 // Bottom-up: the language of all minimum-cost common ancestors of l and r
 // Tries every WGD count pair (k, j); each WGD costs 1, charged once per genome
 static Message join(Model &m, const Message &l, const Message &r) {
-    if (l.length != r.length)
-        throw std::runtime_error("Length mismatch");
+    auto parts = split(l, r);
+    // Shortest chromosomes first: a short chromosome is searched faster. If the short ones
+    // already use up the budget, that (k, j) is dropped without searching the long ones.
+    std::vector<int> order(parts.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::stable_sort(order.begin(), order.end(),
+                     [&](int a, int b) { return parts[a].first.length < parts[b].first.length; });
+
     double best = infinity;
-    Vec combined; // union of the tight graphs of every (k, j) that ties the best cost
-    for (int k = 0; k <= m.max_wgds; ++k) {
+    Vec combined; // union of the languages of every (k, j) that ties the best cost
+    for (int k = 0; k <= m.max_wgds; ++k)
         for (int j = 0; j <= m.max_wgds; ++j) {
-            double wgds = k + j;
-            auto graph = make_graph(m, l, r, k, j, false);
-            // Cap: a branch can only matter if it can tie the best so far. search() keeps
-            // states that equal the cap, so ties survive. infinity also works.
-            auto result = search(*graph, best - wgds, true);
-            if (!std::isfinite(result.cost))
-                continue;
-            double total = wgds + result.cost;
-            if (total < best) {
-                combined.DeleteStates();
-                best = total;
+            double total = k + j;
+            std::vector<Vec> chromosomes(parts.size());
+            bool feasible = true;
+            for (int i : order) {
+                // Every chromosome costs >= 0, so this one may use at most best - total
+                // search() keeps states equal to the cap, so ties survive
+                auto graph = make_graph(m, parts[i].first, parts[i].second, k, j, false);
+                auto result = search(*graph, best - total, true);
+                if (!std::isfinite(result.cost)) {
+                    feasible = false;
+                    break;
+                }
+                total += result.cost;
+                chromosomes[i] = canonical(std::move(result.tight));
             }
-            if (total == best) {
-                fst::Union(&combined, canonical(std::move(result.tight)));
+            if (!feasible)
+                continue;
+            Vec language = std::move(chromosomes[0]); // chromosomes back in profile order
+            for (size_t i = 1; i < chromosomes.size(); ++i)
+                fst::Concat(&language, chromosomes[i]);
+            if (total < best) {
+                best = total;
+                combined = std::move(language);
+            } else if (total == best) {
+                fst::Union(&combined, language);
             }
         }
-    }
     if (!std::isfinite(best) || combined.Start() < 0 || best + l.offset + r.offset >= INF)
         throw std::runtime_error("No finite common ancestor or cost exceeds range");
     return {canonical(std::move(combined)), best + l.offset + r.offset, l.length};
@@ -71,27 +143,33 @@ static Message join(Model &m, const Message &l, const Message &r) {
 
 // Top-down: one best child word for the fixed parent word, and its cost
 // (edge cost + WGDs on this edge + the child's subtree cost in child.offset).
-// One answer is enough here, so only a strictly better branch replaces it.
+// One answer is enough here, so only a strictly better branch replaces it; on a tie the
+// smaller j (fewer WGDs) stays.
 static std::pair<std::string, double> resolve(Model &m, const std::string &parent, const Message &child) {
-    if (int(parent.size()) != child.length)
-        throw std::runtime_error("Length mismatch");
     Message p{linear(parent), 0, int(parent.size())};
+    auto parts = split(p, child);
     std::string bestword;
     double best = infinity;
-    bool found = false;
     for (int j = 0; j <= m.max_wgds; ++j) {
-        auto graph = make_graph(m, p, child, 0, j, true);
-        auto result = search(*graph, best - j, true);
-        if (!std::isfinite(result.cost))
-            continue;
-        double total = j + result.cost;
-        if (!found || total < best) {
+        double total = j;
+        std::string word;
+        bool feasible = true;
+        for (auto &part : parts) {
+            auto graph = make_graph(m, part.first, part.second, 0, j, true);
+            auto result = search(*graph, best - total, true);
+            if (!std::isfinite(result.cost)) {
+                feasible = false;
+                break;
+            }
+            total += result.cost;
+            word += choose(result.tight, true).first;
+        }
+        if (feasible && total < best) {
             best = total;
-            bestword = choose(result.tight, true).first;
-            found = true;
+            bestword = std::move(word);
         }
     }
-    if (!found)
+    if (!std::isfinite(best))
         return {"", infinity};
     return {bestword, best + child.offset};
 }

@@ -1,0 +1,21 @@
+{
+  "distances": {
+    "diploid:leaf_0": 19.0,
+    "diploid:leaf_1": 26.0,
+    "diploid:leaf_2": 28.0,
+    "diploid:leaf_3": 22.0,
+    "diploid:leaf_4": 27.0,
+    "leaf_0:leaf_1": 17.0,
+    "leaf_0:leaf_2": 19.0,
+    "leaf_0:leaf_3": 27.0,
+    "leaf_0:leaf_4": 32.0,
+    "leaf_1:leaf_2": 12.0,
+    "leaf_1:leaf_3": 34.0,
+    "leaf_1:leaf_4": 38.0,
+    "leaf_2:leaf_3": 36.0,
+    "leaf_2:leaf_4": 41.0,
+    "leaf_3:leaf_4": 16.0
+  },
+  "tree_length": 67.0,
+  "profiles_sha256": "acc233ec7cdb19d33e6d2caba24ce3700bb7dc1fb50dd2789314fa959ee0ca4a"
+}
