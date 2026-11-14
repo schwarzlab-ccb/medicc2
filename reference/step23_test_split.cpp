@@ -1,4 +1,4 @@
-// REFERENCE for migration Step 23 (not part of REF; untracked). Goes to tests/migration/test_23_split.cpp.
+// REFERENCE for migration Step 23 (not part of REF's code). Goes to tests/migration/test_23_split.cpp.
 // The plan's test, plus empty chromosomes ("1XX2") and a check that split blocks add up.
 // Run: ./test_fstengine.sh 23
 #include <cassert>

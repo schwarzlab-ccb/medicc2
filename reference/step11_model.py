@@ -1,6 +1,6 @@
 """ctypes wrapper of the fstengine C++ engine (medicc/fstengine/src).
 
-REFERENCE for migration Step 11 (not part of REF; untracked). Goes to medicc/fstengine/model.py.
+REFERENCE for migration Step 11 (not part of REF's code). Goes to medicc/fstengine/model.py.
 It is REF's medicc/native/model.py reduced to what Step 11 needs. Left out until later steps:
 history() (Step 33), clear() / _finish_row() (score cache, Steps 24/31), and the message
 inspection functions am_start / am_final / am_arc / am_import (Step 41's test_fstengine.py).

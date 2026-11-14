@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 12 (not part of REF; untracked). Goes to setup.py in NEW.
+# REFERENCE for migration Step 12 (not part of REF's code). Goes to setup.py in NEW.
 # It is NEW's setup.py (master) with only the fstengine extension added; every change is marked "Step 12".
 # Left out of REF's setup.py on purpose: the PGO block / NativeBuildExt (REF's extra commit 578c60a,
 # not in the plan) and moving the metadata into pyproject.toml.

@@ -1,4 +1,5 @@
-// REFERENCE for migration Step 24 (not part of REF; untracked). Goes to medicc/fstengine/src/types.hpp.
+// REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/src/types.hpp.
+// Markers: ">>> Step 24" new or changed code, ending at "<<< Step 24" (one-line changes have no end); "--- Step 24" code to remove.
 // Your current file; Model gets the score cache `chromosome_scores` (your commented-out copy of
 // REF's Model is dropped). Left out until later steps: a_even, suffix_cache (Step 27),
 // score_key_bytes (Step 31); loss, gain, doubling (Phase 6, histories).
@@ -37,5 +38,6 @@ struct Model {
     int max_wgds = 2;
     // Exact chromosome scores, key = score_key(x, y, k, j, directed) (bounds.hpp). Only finished
     // searches are stored; a search stopped by its cap proves nothing. Cleared by fstengine_clear.
+    // >>> Step 24: add 1 line
     std::unordered_map<std::string, double> chromosome_scores;
 };

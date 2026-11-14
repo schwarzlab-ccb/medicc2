@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 29 (not part of REF; untracked). Goes to medicc/fstengine/src/scoring.hpp.
+// REFERENCE for migration Step 29 (not part of REF's code). Goes to medicc/fstengine/src/scoring.hpp.
+// Markers: ">>> Step 29" new or changed code, ending at "<<< Step 29" (one-line changes have no end); "--- Step 29" code to remove.
 // Step 27's file + greedy_pair() and "search only for something strictly cheaper". From here on
 // the code is final: SAME as REF's scoring.hpp apart from comments and #includes.
 
@@ -22,6 +23,7 @@
 // One (k, j) for the whole genome; each WGD costs 1, charged once.
 
 // A complete path supplies a feasible upper bound, never an approximate answer.
+// >>> Step 29: add 24 lines
 static double greedy_pair(const PairGraph &graph) {
     // Keep active_g unset: greedy prefixes are not necessarily shortest paths.
     double cost = 0;
@@ -47,6 +49,7 @@ static double greedy_pair(const PairGraph &graph) {
     }
     return infinity;
 }
+// <<< Step 29
 // One WGD choice: the cheapest path for exactly k (left) and j (right) WGDs, without the WGD charge.
 // infinity if there is no path that costs at most `cap`.
 static double fixed(Model &m, const std::string &x, const std::string &y, int k, int j, bool directed, double cap) {
@@ -64,11 +67,13 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
         auto graph = make_pair_graph(m, x, y, k, j, cap);
         // Costs are whole numbers: with a feasible path of cost f, only a path of cost <= f - 1
         // can beat it, so search with that smaller cap. The answer is the cheaper of the two.
+        // >>> Step 29: change 5 lines (was 1)
         double feasible = greedy_pair(graph);
         cap = std::min(cap, feasible - 1);
         graph.budget->cap = cap;
         value = std::min(feasible, search(*graph.exact, cap, false, graph.heuristic.get(),
                                           graph.budget.get()).cost);
+        // <<< Step 29
     } else {
         // Directed scores stay plain bounded Dijkstra, like join() and resolve().
         Message a{linear(x), 0, int(x.size())}, b{linear(y), 0, int(y.size())};
@@ -141,14 +146,17 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
             // Integral costs: only a strict improvement is needed for a scalar. This segment
             // only matters if it costs <= best - other - 1, and its witness already costs upper,
             // so ask only for <= upper - 1.
+            // >>> Step 29: change 1 line (was 1)
             double room = std::min(best - other - 1, bounds[i].upper[branch] - 1);
             double value = fixed(m, segments[i].first, segments[i].second, k, j, directed, room);
             // Nothing cheaper than the witness: the witness cost IS the exact score (certified).
+            // >>> Step 29: add 5 lines
             if (!std::isfinite(value) && room == bounds[i].upper[branch] - 1) {
                 value = bounds[i].upper[branch];
                 cache_score(m, score_key(segments[i].first, segments[i].second, k, j, directed),
                             value);
             }
+            // <<< Step 29
             if (!std::isfinite(value)) {
                 bound = infinity;
                 break;

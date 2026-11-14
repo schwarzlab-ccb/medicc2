@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 14 (not part of REF; untracked). Goes to medicc/fstengine/__init__.py.
+# REFERENCE for migration Step 14 (not part of REF's code). Goes to medicc/fstengine/__init__.py.
 # REF's medicc/native/__init__.py with native -> fstengine. Same as REF otherwise.
 
 """fstengine: the OpenFST copy-number engine (C++ in src/, ctypes wrapper in model.py).

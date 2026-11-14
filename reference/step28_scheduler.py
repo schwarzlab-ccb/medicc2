@@ -1,4 +1,5 @@
-"""REFERENCE for migration Step 28 (not part of REF; untracked). Goes to medicc/fstengine/scheduler.py.
+"""REFERENCE for migration Step 28 (not part of REF's code). Goes to medicc/fstengine/scheduler.py.
+Markers: ">>> Step 28" new or changed code, ending at "<<< Step 28" (one-line changes have no end); "--- Step 28" code to remove.
 Step 24's file; pairwise_distances() shortens every pair first (shortening.py). Left out until
 later steps: model._finish_row() instead of clear() (Step 31).
 
@@ -14,6 +15,7 @@ from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 import numpy as np
 import pandas as pd
 
+# >>> Step 28: add 1 line
 from medicc.fstengine import shortening
 from medicc.fstengine.model import Model
 
@@ -55,11 +57,13 @@ def pairwise_distances(cn_str_dict, config, n_cores=1):
     n = len(samples)
     distances = np.zeros((n, n), dtype=float)
     # Where each profile changes, once per sample; a pair keeps the columns where either changes.
+    # >>> Step 28: add 1 line
     prepared = [shortening.prepare(cn_str_dict[sample]) for sample in samples]
     models = _WorkerModels(config)
 
     def score_row(i):
         model = models.get()
+        # >>> Step 28: change 1 line (was 1)
         row = [model.score(*shortening.pair(prepared[i], prepared[j])) for j in range(i + 1, n)]
         model.clear()  # the score cache is only reused within a row (Step 31 keeps it)
         return i, row

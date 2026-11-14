@@ -1,4 +1,4 @@
-// REFERENCE for migration Step 24 (not part of REF; untracked). Goes to tests/migration/test_24_cache.cpp.
+// REFERENCE for migration Step 24 (not part of REF's code). Goes to tests/migration/test_24_cache.cpp.
 // A search stopped by a small cap must not be cached; a finished one must.
 // Run: ./test_fstengine.sh 24
 #include <cassert>

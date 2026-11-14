@@ -1,4 +1,5 @@
-"""REFERENCE for migration Step 31 (not part of REF; untracked). Goes to medicc/fstengine/model.py.
+"""REFERENCE for migration Step 31 (not part of REF's code). Goes to medicc/fstengine/model.py.
+Markers: ">>> Step 31" new or changed code, ending at "<<< Step 31" (one-line changes have no end); "--- Step 31" code to remove.
 Step 24's file + 'fstengine_finish_row' in the signatures + Model._finish_row(). Left out until
 later steps: history() (Step 33), am_start/am_final/am_arc/am_import (Step 41).
 
@@ -64,6 +65,7 @@ def library():
         'fstengine_resolve': (s, [p, s, p, ctypes.POINTER(d)]),
         'fstengine_score': (d, [p, s, s, i]),
         'fstengine_clear': (None, [p]),
+        # >>> Step 31: add 1 line
         'fstengine_finish_row': (None, [p]),
     }
     for name, (result, arguments) in signatures.items():
@@ -169,10 +171,12 @@ class Model:
             raise RuntimeError(self.lib.am_error().decode())
         return value
 
+    # >>> Step 31: add 3 lines
     def _finish_row(self):
         """Release row-local FSTs; keep the bounded exact-score cache (the scheduler, per row)."""
         self.check_open()
         self.lib.fstengine_finish_row(self.handle)
+    # <<< Step 31
 
     def clear(self):
         """Release all caches of this handle (answers stay the same)."""

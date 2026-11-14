@@ -1,4 +1,5 @@
-"""REFERENCE for migration Step 24 (not part of REF; untracked). Goes to medicc/fstengine/scheduler.py.
+"""REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/scheduler.py.
+Markers: ">>> Step 24" new or changed code, ending at "<<< Step 24" (one-line changes have no end); "--- Step 24" code to remove.
 Your current file + model.clear() after each row. Left out until later steps: shortening (Step 28),
 model._finish_row() instead of clear() (Step 31).
 
@@ -58,6 +59,7 @@ def pairwise_distances(cn_str_dict, config, n_cores=1):
     def score_row(i):
         model = models.get()
         row = [model.score(cn_str_dict[samples[i]], cn_str_dict[samples[j]]) for j in range(i + 1, n)]
+        # >>> Step 24: add 1 line
         model.clear()  # the score cache is only reused within a row (Step 31 keeps it)
         return i, row
 

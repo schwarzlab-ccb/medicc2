@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate medicc/fstengine/src/chromosome_constants.hpp.
 
-REFERENCE for migration Step 25 (not part of REF; untracked). Goes to tools/generate_chromosome_bound.py.
+REFERENCE for migration Step 25 (not part of REF's code). Goes to tools/generate_chromosome_bound.py.
 SAME as REF's tools/generate_chromosome_bound.py; only the output path (and "native" in this
 docstring) changed from medicc/native to medicc/fstengine. The header it writes is byte-identical
 to REF's medicc/native/src/chromosome_constants.hpp.

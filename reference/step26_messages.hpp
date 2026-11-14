@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 26 (not part of REF; untracked). Goes to medicc/fstengine/src/messages.hpp.
+// REFERENCE for migration Step 26 (not part of REF's code). Goes to medicc/fstengine/src/messages.hpp.
+// Markers: ">>> Step 26" new or changed code, ending at "<<< Step 26" (one-line changes have no end); "--- Step 26" code to remove.
 // Step 23's file; join() and resolve() now use the bounds. join() / resolve() are SAME as REF's
 // messages.hpp. Left out until later steps: make_graph / branch_graph move to astar.hpp (Step 27).
 //
@@ -29,6 +30,7 @@
 #include "types.hpp"
 #include "fst_operations.hpp"
 #include "search.hpp"
+// >>> Step 26: add 1 line
 #include "bounds.hpp"   // message_bounds, branch_order
 
 // Every parent that can reach a word of 'child' with exactly k WGDs:
@@ -104,6 +106,7 @@ static std::vector<std::pair<Message, Message>> split(const Message &l, const Me
 // searched yet; a block may use at most best - total - remaining.
 static Message join(Model &m, const Message &l, const Message &r) {
     auto parts = split(l, r);
+    // >>> Step 26: add 1 line
     auto bounds = message_bounds(m, parts, false);
     std::vector<int> order(parts.size());
     std::iota(order.begin(), order.end(), 0);
@@ -111,22 +114,27 @@ static Message join(Model &m, const Message &l, const Message &r) {
                      [&](int a, int b) { return parts[a].first.length < parts[b].first.length; });
     double best = infinity;
     Vec combined;
+    // >>> Step 26: change 6 lines (was 3)
     auto branches = branch_order(m, bounds, false, best);
     for (auto [lower, branch] : branches) {
         if (lower > best)
             continue; // Equality must retain all optimal words.
         int k = branch / 3, j = branch % 3;
         double total = k + j, remaining = lower - total;
+    // <<< Step 26
         std::vector<Vec> blocks(parts.size());
         bool feasible = true;
         for (int i : order) {
+            // >>> Step 26: add 6 lines
             remaining -= bounds[i].lower[branch];
             if (total + bounds[i].lower[branch] + remaining > best) {
                 feasible = false;
                 break;
             }
             double room = best - total - remaining;
+            // <<< Step 26
             auto graph = make_graph(m, parts[i].first, parts[i].second, k, j, false);
+            // >>> Step 26: change 1 line (was 1)
             auto result = search(*graph, room, true);
             if (!std::isfinite(result.cost)) {
                 feasible = false;
@@ -149,26 +157,33 @@ static Message join(Model &m, const Message &l, const Message &r) {
     }
     if (!std::isfinite(best) || combined.Start() < 0 || best + l.offset + r.offset >= INF)
         throw std::runtime_error("No finite common ancestor or cost exceeds range");
+    // >>> Step 26: change 1 line (was 1)
     return {canonical(std::move(combined)), int(best) + l.offset + r.offset, l.length};
 }
 // Top-down: one best child word for the fixed parent word, and its cost
 // (edge cost + WGDs on this edge + the child's subtree cost in child.offset).
 // One answer is enough here, so a choice that can only tie the best is skipped too.
+// >>> Step 26: change 2 lines (was 1)
 static std::pair<std::string, double> resolve(Model &m, const std::string &parent,
                                               const Message &child) {
+// <<< Step 26
     Message p{linear(parent), 0, int(parent.size())};
     auto parts = split(p, child);
+    // >>> Step 26: add 1 line
     auto bounds = message_bounds(m, parts, true);
     std::string bestword;
     double best = infinity;
     bool found = false;
+    // >>> Step 26: change 5 lines (was 2)
     auto branches = branch_order(m, bounds, true, best);
     for (auto [lower, branch] : branches) {
         if (lower > best || (found && lower == best))
             continue;
         double total = branch, remaining = lower - total;
+    // <<< Step 26
         std::string word;
         bool feasible = true;
+        // >>> Step 26: change 9 lines (was 3)
         for (size_t i = 0; i < parts.size(); ++i) {
             remaining -= bounds[i].lower[branch];
             if (total + bounds[i].lower[branch] + remaining > best) {
@@ -178,6 +193,7 @@ static std::pair<std::string, double> resolve(Model &m, const std::string &paren
             auto graph = make_graph(m, parts[i].first, parts[i].second, 0, branch, true);
             auto result =
                 search(*graph, best - total - remaining, true);
+        // <<< Step 26
             if (!std::isfinite(result.cost)) {
                 feasible = false;
                 break;

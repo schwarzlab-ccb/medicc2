@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 26 (not part of REF; untracked). Goes to medicc/fstengine/src/scoring.hpp.
+// REFERENCE for migration Step 26 (not part of REF's code). Goes to medicc/fstengine/src/scoring.hpp.
+// Markers: ">>> Step 26" new or changed code, ending at "<<< Step 26" (one-line changes have no end); "--- Step 26" code to remove.
 // Step 24's file; score() now uses the bounds of bounds.hpp. It is REF's score() with one change:
 // the cap of a segment is room = min(best - other, upper), not min(best - other - 1, upper - 1),
 // and there is no "certify" branch. Left out until later steps:
@@ -63,12 +64,15 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
     // Per segment and WGD choice (branch = 3k + j): a lower bound and the cost of one real
     // history (witness). Both equal: the exact score, cached without a search.
+    // >>> Step 26: change 4 lines (was 1)
     std::vector<BlockBounds> bounds(segments.size());
     for (size_t i = 0; i < segments.size(); ++i) {
         bounds[i].upper.fill(infinity);
         auto &[a, b] = segments[i];
+    // <<< Step 26
         for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
             for (int j = 0; j <= m.max_wgds; ++j) {
+                // >>> Step 26: change 29 lines (was 4)
                 int branch = 3 * k + j;
                 double known = cached_score(m, a, b, k, j, directed);
                 if (known >= 0) {
@@ -103,11 +107,14 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
             double value = fixed(m, segments[i].first, segments[i].second, k, j, directed, room);
             if (!std::isfinite(value)) {
                 bound = infinity;
+                // <<< Step 26
                 break;
             }
+            // >>> Step 26: change 3 lines (was 1)
             bound += value - before;
         }
         best = std::min(best, bound);
+            // <<< Step 26
     }
     return best;
 }

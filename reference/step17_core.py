@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 17 (not part of REF; untracked). Goes to medicc/core.py in NEW.
+# REFERENCE for migration Step 17 (not part of REF's code). Goes to medicc/core.py in NEW.
 # It is NEW's committed file (master) with only this step's changes; see the plan for the step.
 # main(): the fstengine path (strings, fstengine.pairwise_distances, reconstruct_ancestors(n_cores),
 # create_df_from_cn_str_dict); --events raises MEDICCError until Phase 6 (Step 34).

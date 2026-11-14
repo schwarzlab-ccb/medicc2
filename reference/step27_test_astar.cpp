@@ -1,4 +1,4 @@
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to tests/migration/test_27_astar.cpp.
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to tests/migration/test_27_astar.cpp.
 // The plan's test, plus: the pair graph (A* + filter) gives the same answers as plain Dijkstra.
 // Run: ./test_fstengine.sh 27
 #include <cassert>

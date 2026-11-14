@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to medicc/fstengine/src/messages.hpp.
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to medicc/fstengine/src/messages.hpp.
+// Markers: ">>> Step 27" new or changed code, ending at "<<< Step 27" (one-line changes have no end); "--- Step 27" code to remove.
 // Step 26's file without branch_graph / make_graph (moved to astar.hpp). From here on the code
 // is final: SAME as REF's messages.hpp apart from comments and #includes.
 //
@@ -23,15 +24,18 @@
 #include <vector>
 
 #include <fst/concat.h>
+// --- Step 27: remove 1 line here, starting: #include <fst/project.h>
 #include <fst/union.h>
 
 #include "types.hpp"
 #include "fst_operations.hpp"
+// >>> Step 27: add 1 line
 #include "astar.hpp"    // make_graph
 #include "search.hpp"
 #include "bounds.hpp"   // message_bounds, branch_order
 
 // The columns begin..end of a message as a message of its own (layers from fst_operations.hpp).
+// --- Step 27: remove 13 lines here, starting: static Ptr branch_graph(Model &m, const Message &child, int k, bool pr
 static Message slice(const Message &m, const Layers &ls, int begin, int end) {
     Message out;
     out.length = end - begin;

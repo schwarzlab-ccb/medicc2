@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# REFERENCE for migration Step 19 (not part of REF; untracked). Goes to medicc2 in NEW.
+# REFERENCE for migration Step 19 (not part of REF's code). Goes to medicc2 in NEW.
 # Changes from REF: read_fst() without wgd_x2 (--wgd-x2 only logs that it has no effect), early
 # errors for --prune-weight > 0 and --events (not yet: Phase 6) with the built-in model, help texts,
 # write_branch_lengths(normal_name=...). Not yet: --nni-mode (Phase 7), --tree-method/--fastme

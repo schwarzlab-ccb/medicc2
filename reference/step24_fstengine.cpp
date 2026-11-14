@@ -1,4 +1,5 @@
-// REFERENCE for migration Step 24 (not part of REF; untracked). Goes to medicc/fstengine/src/fstengine.cpp.
+// REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/src/fstengine.cpp.
+// Markers: ">>> Step 24" new or changed code, ending at "<<< Step 24" (one-line changes have no end); "--- Step 24" code to remove.
 // Your current file + #include "bounds.hpp" + fstengine_clear (REF: nf_clear, which later also
 // clears suffix_cache and score_key_bytes). Left out until later steps: astar.hpp / pair_filter.hpp
 // and a_even (Step 27), fstengine_finish_row (Step 31), history (Phase 6), am_start/am_final/
@@ -19,6 +20,7 @@
 #include "fst_operations.hpp"
 #include "search.hpp"
 #include "messages.hpp"
+// >>> Step 24: add 1 line
 #include "bounds.hpp"
 #include "scoring.hpp"
 
@@ -139,7 +141,10 @@ double fstengine_score(void *m, const char *x, const char *y, int directed) {
 }
 
 // Release the score cache of this handle (the scheduler calls it after each matrix row).
+// >>> Step 24: add 2 lines
 void fstengine_clear(void *m) {
     static_cast<Model *>(m)->chromosome_scores.clear();
+// <<< Step 24
 }
+// >>> Step 24: add 1 line
 }

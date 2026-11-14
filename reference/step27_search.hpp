@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to medicc/fstengine/src/search.hpp.
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to medicc/fstengine/src/search.hpp.
+// Markers: ">>> Step 27" new or changed code, ending at "<<< Step 27" (one-line changes have no end); "--- Step 27" code to remove.
 // Your Step 7 file + the optional Heuristic (A*) and ComposeBudget, and the de-duplication of
 // `settled` switched on. Code now SAME as REF's search.hpp, except that REF's search() also has an
 // `original_ids` argument (event histories, Phase 6).
@@ -13,23 +14,29 @@
 // cannot lead to a better one. The test is strictly ">": a state with equal cost
 // can still lead to another, equally good answer.
 #include "fst_operations.hpp"
+// >>> Step 27: add 2 lines
 #include "astar.hpp"       // Heuristic
 #include "pair_filter.hpp" // ComposeBudget
+// <<< Step 27
 
 // Queue order: smaller g + h first (g = distance so far, the vector ShortestDistance fills;
 // h = heuristic guess of the cost to go, 0 without a heuristic = Dijkstra).
 struct Priority {
     const std::vector<W> *distance;
+    // >>> Step 27: add 4 lines
     const Heuristic *heuristic;
     double value(int s) const {
         return (*distance)[s].Value() + (heuristic ? (*heuristic)(s) : 0);
     }
+    // <<< Step 27
     bool operator()(int a, int b) const {
+        // >>> Step 27: change 4 lines (was 1)
         double x = value(a), y = value(b);
         if (x != y)
             return x < y;
         // Equal g + h: prefer the state with the larger g (closer to the end); all ties are still kept.
         return (*distance)[a].Value() > (*distance)[b].Value();
+        // <<< Step 27
     }
 };
 
@@ -37,13 +44,16 @@ class BoundQueue : public fst::ShortestFirstQueue<int, Priority> {
     using Base = fst::ShortestFirstQueue<int, Priority>;
     const Fst &graph;
     const std::vector<W> &distance;
+    // >>> Step 27: add 1 line
     const Heuristic *heuristic;
     bool ties; // true: keep every optimal path; false: the cost alone is enough
+    // >>> Step 27: add 5 lines
     ComposeBudget *budget; // pair graphs: the filter reads the current cap from here
     double priority() const {
         int s = Base::Head();
         return distance[s].Value() + (heuristic ? (*heuristic)(s) : 0);
     }
+    // <<< Step 27
 
 public:
     double best; // starts at the cap, then the best complete answer found
@@ -51,16 +61,19 @@ public:
     std::vector<int> settled;
 
     // constructor in C++
+    // >>> Step 27: change 4 lines (was 2)
     BoundQueue(const Fst &f, const std::vector<W> &d, double cap, bool all, const Heuristic *h,
                ComposeBudget *context = nullptr)
         : Base(Priority{&d, h}), graph(f), distance(d), heuristic(h), ties(all), budget(context),
           best(cap) {}
+    // <<< Step 27
 
     // OpenFST stops when the queue says it is empty. Say so early when the cheapest
     // waiting state cannot beat (or, without ties, cannot equal) the best answer.
     bool Empty() const override {
         if (Base::Empty())
             return true;
+        // >>> Step 27: change 1 line (was 1)
         double next = priority(); // g + h: no path through this state is cheaper
         return !std::isfinite(next) || next > best || (!ties && found && next >= best);
     }
@@ -72,11 +85,13 @@ public:
             best = value;
             found = true;
         }
+        // >>> Step 27: add 5 lines
         if (budget) { // the pair filter drops arcs above best (see pair_filter.hpp)
             budget->cap = best;
             budget->active_state = s;
             budget->active_g = distance[s].Value();
         }
+        // <<< Step 27
         settled.push_back(s);
         Base::Dequeue();
     }
@@ -90,12 +105,15 @@ struct Search {
 // Cheapest path through 'graph' that costs at most 'cap'. With 'retain', also return
 // the tight graph: every optimal path, with costs reset to 0 (the cost is in 'cost').
 // heuristic = nullptr: Dijkstra. budget: only for pair graphs (make_pair_graph).
+// >>> Step 27: change 2 lines (was 1)
 static Search search(const Fst &graph, double cap, bool retain,
                      const Heuristic *heuristic = nullptr, ComposeBudget *budget = nullptr) {
+// <<< Step 27
     Search out;
     if (cap < 0)
         return out;
     std::vector<W> distance;
+    // >>> Step 27: change 1 line (was 1)
     BoundQueue queue(graph, distance, cap, retain, heuristic, budget);
     fst::ShortestDistanceOptions<Arc, BoundQueue, fst::AnyArcFilter<Arc>> opts(&queue, {});
     fst::ShortestDistance(graph, &distance, opts);
@@ -111,9 +129,11 @@ static Search search(const Fst &graph, double cap, bool retain,
     // Dijkstra settles each state once, but OpenFST re-enqueues a state whose
     // distance improves after it was dequeued (possible with A*, Step 27).
     // Keep each settled state once.
+    // >>> Step 27: add 3 lines
     std::sort(queue.settled.begin(), queue.settled.end());
     queue.settled.erase(std::unique(queue.settled.begin(), queue.settled.end()),
                         queue.settled.end());
+    // <<< Step 27
 
     // Reconstruct the equally good FSA
     // Copy out the settled states that are not too expensive ...

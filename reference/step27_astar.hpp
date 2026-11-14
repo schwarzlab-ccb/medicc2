@@ -1,5 +1,5 @@
 #pragma once
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to medicc/fstengine/src/astar.hpp (new).
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to medicc/fstengine/src/astar.hpp (new).
 // REF's astar.hpp without Matcher / Filter / StateTable / tracked_compose (they are for the event
 // histories, Phase 6). branch_graph / make_graph are your functions from messages.hpp, moved here.
 

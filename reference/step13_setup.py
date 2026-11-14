@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 13 (not part of REF; untracked). Goes to setup.py in NEW.
+# REFERENCE for migration Step 13 (not part of REF's code). Goes to setup.py in NEW.
 # Step 12's setup.py plus two changes, marked "Step 13": medicc.fstengine in `packages`, and its
 # files in `package_data`. pyproject.toml stays as it is: the metadata already lives here.
 # (REF moved all metadata into pyproject.toml; that is a clean-up, not needed to build or ship.)

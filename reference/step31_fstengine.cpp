@@ -1,4 +1,5 @@
-// REFERENCE for migration Step 31 (not part of REF; untracked). Goes to medicc/fstengine/src/fstengine.cpp.
+// REFERENCE for migration Step 31 (not part of REF's code). Goes to medicc/fstengine/src/fstengine.cpp.
+// Markers: ">>> Step 31" new or changed code, ending at "<<< Step 31" (one-line changes have no end); "--- Step 31" code to remove.
 // Step 27's file + fstengine_finish_row, and fstengine_clear resets score_key_bytes. Left out
 // until later steps: history and loss / gain / doubling (Phase 6), am_start/am_final/am_arc/
 // am_import (Step 41).
@@ -154,14 +155,18 @@ double fstengine_score(void *m, const char *x, const char *y, int directed) {
 
 // After a matrix row: drop only the large per-string FSTs (suffix_cache). Keep the bounded
 // exact scores: the next row asks for many of the same chromosome pairs.
+// >>> Step 31: change 1 line (was 2)
 void fstengine_finish_row(void *m) {
     static_cast<Model *>(m)->suffix_cache.clear();
 }
 // Release all caches of this handle.
+// >>> Step 31: add 5 lines
 void fstengine_clear(void *m) {
     auto &model = *static_cast<Model *>(m);
     model.chromosome_scores.clear();
     model.score_key_bytes = 0;
     model.suffix_cache.clear();
+// <<< Step 31
 }
+// >>> Step 31: add 1 line
 }

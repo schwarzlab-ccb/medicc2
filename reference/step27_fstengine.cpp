@@ -1,4 +1,5 @@
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to medicc/fstengine/src/fstengine.cpp.
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to medicc/fstengine/src/fstengine.cpp.
+// Markers: ">>> Step 27" new or changed code, ending at "<<< Step 27" (one-line changes have no end); "--- Step 27" code to remove.
 // Step 24's file + #include "astar.hpp" / "pair_filter.hpp", a_even in load_model() and
 // suffix_cache in fstengine_clear. Left out until later steps: fstengine_finish_row and
 // score_key_bytes (Step 31), history (Phase 6), am_start/am_final/am_arc/am_import (Step 41).
@@ -16,8 +17,10 @@
 
 #include "types.hpp"
 #include "fst_operations.hpp"
+// >>> Step 27: add 2 lines
 #include "astar.hpp"
 #include "pair_filter.hpp"
+// <<< Step 27
 #include "search.hpp"
 #include "messages.hpp"
 #include "bounds.hpp"
@@ -64,6 +67,7 @@ static Model load_model(const char *path) {
         throw std::runtime_error("Model file has no A or AD");
     // a_even: the states of A, but only the arcs that read an even copy number or X
     // (label = CN + 1, X = 10).
+    // >>> Step 27: add 11 lines
     for (int q = 0; q < m.a.NumStates(); ++q)
         m.a_even.AddState();
     m.a_even.SetStart(m.a.Start());
@@ -75,6 +79,7 @@ static Model load_model(const char *path) {
                 m.a_even.AddArc(q, a);
         }
     }
+    // <<< Step 27
     return m;
 }
 
@@ -155,6 +160,7 @@ double fstengine_score(void *m, const char *x, const char *y, int directed) {
 // Release the caches of this handle (the scheduler calls it after each matrix row).
 void fstengine_clear(void *m) {
     static_cast<Model *>(m)->chromosome_scores.clear();
+    // >>> Step 27: add 1 line
     static_cast<Model *>(m)->suffix_cache.clear();
 }
 }

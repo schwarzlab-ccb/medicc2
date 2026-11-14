@@ -1,4 +1,4 @@
-// REFERENCE for migration Step 26 (not part of REF; untracked). Goes to tests/migration/test_26_bounds.cpp.
+// REFERENCE for migration Step 26 (not part of REF's code). Goes to tests/migration/test_26_bounds.cpp.
 // The plan's test, plus: the bounds really bound the exact score.
 // Run: ./test_fstengine.sh 26
 #include <cassert>

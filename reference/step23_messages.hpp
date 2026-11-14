@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 23 (not part of REF; untracked). Goes to medicc/fstengine/src/messages.hpp.
+// REFERENCE for migration Step 23 (not part of REF's code). Goes to medicc/fstengine/src/messages.hpp.
+// Markers: ">>> Step 23" new or changed code, ending at "<<< Step 23" (one-line changes have no end); "--- Step 23" code to remove.
 // Your Step 8 file + slice() / split() (copied from REF's messages.hpp), and join() / resolve()
 // search block by block. Left out until later steps:
 //   bounds: message_bounds, branch_order, the `remaining` / `lower` pruning (Step 26)
@@ -18,13 +19,16 @@
 
 #include <cmath>
 #include <memory>
+// >>> Step 23: add 1 line
 #include <numeric>
 #include <stdexcept>
 #include <string>
 #include <utility>
+// >>> Step 23: add 2 lines
 #include <vector>
 
 #include <fst/concat.h>
+// <<< Step 23
 #include <fst/project.h>
 #include <fst/union.h>
 
@@ -54,6 +58,7 @@ static Ptr make_graph(Model &m, const Message &left, const Message &right, int k
 }
 
 // The columns begin..end of a message as a message of its own (layers from fst_operations.hpp).
+// >>> Step 23: change 23 lines (was 1)
 static Message slice(const Message &m, const Layers &ls, int begin, int end) {
     Message out;
     out.length = end - begin;
@@ -79,8 +84,10 @@ static Message slice(const Message &m, const Layers &ls, int begin, int end) {
 
 // Cut two equally long messages into independent blocks (pairs of slices).
 static std::vector<std::pair<Message, Message>> split(const Message &l, const Message &r) {
+// <<< Step 23
     if (l.length != r.length)
         throw std::runtime_error("Length mismatch");
+    // >>> Step 23: add 20 lines
     auto a = layers(l), b = layers(r);
     std::vector<std::pair<Message, Message>> parts;
     int begin = 0;
@@ -108,10 +115,13 @@ static Message join(Model &m, const Message &l, const Message &r) {
     std::iota(order.begin(), order.end(), 0);
     std::stable_sort(order.begin(), order.end(),
                      [&](int a, int b) { return parts[a].first.length < parts[b].first.length; });
+    // <<< Step 23
     double best = infinity;
     Vec combined; // union of the languages of every (k, j) that ties the best cost
+    // >>> Step 23: change 1 line (was 1)
     for (int k = 0; k <= m.max_wgds; ++k)
         for (int j = 0; j <= m.max_wgds; ++j) {
+            // >>> Step 23: change 14 lines (was 4)
             double total = k + j;
             std::vector<Vec> blocks(parts.size());
             bool feasible = true;
@@ -128,16 +138,21 @@ static Message join(Model &m, const Message &l, const Message &r) {
                 blocks[i] = canonical(std::move(result.tight));
             }
             if (!feasible)
+            // <<< Step 23
                 continue;
+            // >>> Step 23: change 3 lines (was 1)
             Vec language = std::move(blocks[0]); // blocks back in profile order
             for (size_t i = 1; i < blocks.size(); ++i)
                 fst::Concat(&language, blocks[i]);
+            // <<< Step 23
             if (total < best) {
                 combined.DeleteStates();
                 best = total;
             }
+            // >>> Step 23: change 2 lines (was 4)
             if (total == best)
                 fst::Union(&combined, language);
+            // <<< Step 23
         }
     if (!std::isfinite(best) || combined.Start() < 0 || best + l.offset + r.offset >= INF)
         throw std::runtime_error("No finite common ancestor or cost exceeds range");
@@ -148,12 +163,15 @@ static Message join(Model &m, const Message &l, const Message &r) {
 // (edge cost + WGDs on this edge + the child's subtree cost in child.offset).
 // One answer is enough here, so only a strictly better branch replaces it.
 static std::pair<std::string, double> resolve(Model &m, const std::string &parent, const Message &child) {
+    // --- Step 23: remove 2 lines here, starting: if (int(parent.size()) != child.length)
     Message p{linear(parent), 0, int(parent.size())};
+    // >>> Step 23: add 1 line
     auto parts = split(p, child);
     std::string bestword;
     double best = infinity;
     bool found = false;
     for (int j = 0; j <= m.max_wgds; ++j) {
+        // >>> Step 23: change 14 lines (was 6)
         double total = j;
         std::string word;
         bool feasible = true;
@@ -168,7 +186,9 @@ static std::pair<std::string, double> resolve(Model &m, const std::string &paren
             word += choose(result.tight, true).first;
         }
         if (feasible && (!found || total < best)) {
+        // <<< Step 23
             best = total;
+            // >>> Step 23: change 1 line (was 1)
             bestword = std::move(word);
             found = true;
         }

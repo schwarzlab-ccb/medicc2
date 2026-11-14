@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 24 (not part of REF; untracked). Goes to medicc/fstengine/src/scoring.hpp.
+// REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/src/scoring.hpp.
+// Markers: ">>> Step 24" new or changed code, ending at "<<< Step 24" (one-line changes have no end); "--- Step 24" code to remove.
 // Step 23's file; only fixed() changes: the x > y swap and the score cache (bounds.hpp).
 // Left out until later steps:
 //   bounds and branch order: BlockBounds, string_lower, witness, branch_order, cached_score  (Step 26)
@@ -14,6 +15,7 @@
 #include "fst_operations.hpp"
 #include "search.hpp"
 #include "messages.hpp"
+// >>> Step 24: add 1 line
 #include "bounds.hpp"
 
 // Scalar scores: score() is join()/resolve() on two single profiles, keeping only the cost.
@@ -25,19 +27,23 @@
 // infinity if there is no path that costs at most `cap`.
 static double fixed(Model &m, const std::string &x, const std::string &y, int k, int j, bool directed, double cap) {
     // K is symmetric: always search in the order the cache key uses.
+    // >>> Step 24: add 6 lines
     if (!directed && (x > y || (x == y && k > j)))
         return fixed(m, y, x, j, k, false, cap);
     const std::string key = score_key(x, y, k, j, directed);
     const auto known = m.chromosome_scores.find(key);
     if (known != m.chromosome_scores.end())
         return known->second;
+    // <<< Step 24
     Message a{linear(x), 0, int(x.size())}, b{linear(y), 0, int(y.size())};
     auto graph = make_graph(m, a, b, k, j, directed);
+    // >>> Step 24: change 4 lines (was 1)
     double value = search(*graph, cap, false).cost;
     // A finite result is the exact optimum. infinity only says "more than cap": not cached.
     if (std::isfinite(value))
         cache_score(m, key, value);
     return value;
+    // <<< Step 24
 }
 
 // The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).

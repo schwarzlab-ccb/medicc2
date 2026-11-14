@@ -1,4 +1,4 @@
-"""REFERENCE for migration Step 31 (not part of REF; untracked). Goes to tests/migration/test_31_cache.py.
+"""REFERENCE for migration Step 31 (not part of REF's code). Goes to tests/migration/test_31_cache.py.
 The plan's test, plus: a long-lived cache gives the same answers as a fresh one.
 """
 from pathlib import Path

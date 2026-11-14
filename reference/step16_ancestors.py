@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 16 (not part of REF; untracked). Goes to medicc/ancestors.py in NEW.
+# REFERENCE for migration Step 16 (not part of REF's code). Goes to medicc/ancestors.py in NEW.
 # It is NEW's committed file (master) with only this step's changes; see the plan for the step.
 # Same as REF's medicc/ancestors.py, with native -> fstengine.
 

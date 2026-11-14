@@ -1,4 +1,5 @@
-"""REFERENCE for migration Step 31 (not part of REF; untracked). Goes to medicc/fstengine/scheduler.py.
+"""REFERENCE for migration Step 31 (not part of REF's code). Goes to medicc/fstengine/scheduler.py.
+Markers: ">>> Step 31" new or changed code, ending at "<<< Step 31" (one-line changes have no end); "--- Step 31" code to remove.
 Step 28's file with model._finish_row() instead of model.clear(). Code now SAME as REF's
 medicc/native/scheduler.py (names native -> fstengine; docstrings are yours).
 
@@ -61,6 +62,7 @@ def pairwise_distances(cn_str_dict, config, n_cores=1):
     def score_row(i):
         model = models.get()
         row = [model.score(*shortening.pair(prepared[i], prepared[j])) for j in range(i + 1, n)]
+        # >>> Step 31: change 1 line (was 1)
         model._finish_row()  # keep the bounded exact scores; release row-local FSTs
         return i, row
 

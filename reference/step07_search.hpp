@@ -1,6 +1,6 @@
 #pragma once
 
-// REFERENCE for migration Step 7 (not part of REF; untracked). It is REF's search.hpp
+// REFERENCE for migration Step 7 (not part of REF's code). It is REF's search.hpp
 // without the A* parts (Heuristic, ComposeBudget, original_ids), which come in Step 27.
 //
 // Bounded shortest-path search (Dijkstra) over delayed OpenFST graphs. OpenFST's

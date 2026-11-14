@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 15 (not part of REF; untracked). Goes to medicc/io.py in NEW.
+# REFERENCE for migration Step 15 (not part of REF's code). Goes to medicc/io.py in NEW.
 # It is NEW's committed file (master) with only this step's changes; see the plan for the step.
 # Changes (all from REF, native -> fstengine): import medicc.fstengine; read_fst() returns
 # fstengine.ModelConfig unless user_fst is given; load_main_fsts() is deleted (it used the old

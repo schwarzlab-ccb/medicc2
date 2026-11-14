@@ -1,4 +1,4 @@
-"""REFERENCE for migration Step 28 (not part of REF; untracked). Goes to tests/migration/test_28_shortening.py.
+"""REFERENCE for migration Step 28 (not part of REF's code). Goes to tests/migration/test_28_shortening.py.
 The plan's test, plus: the scheduler's distances equal the scores of the full profiles.
 """
 from pathlib import Path

@@ -1,6 +1,6 @@
 """Phase 5 benchmark: time the fstengine on meso5 with 1 core, and check the answers never change.
 
-REFERENCE for migration Step 22 (not part of REF; untracked). Goes to tests/migration/bench.py.
+REFERENCE for migration Step 22 (not part of REF's code). Goes to tests/migration/bench.py.
 Written for this plan: REF's tools/benchmark_native.py (the closest match) times the finished
 engine for PGO builds on gundem data, with NNI and events; none of that exists yet here.
 

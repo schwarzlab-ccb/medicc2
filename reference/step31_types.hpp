@@ -1,4 +1,5 @@
-// REFERENCE for migration Step 31 (not part of REF; untracked). Goes to medicc/fstengine/src/types.hpp.
+// REFERENCE for migration Step 31 (not part of REF's code). Goes to medicc/fstengine/src/types.hpp.
+// Markers: ">>> Step 31" new or changed code, ending at "<<< Step 31" (one-line changes have no end); "--- Step 31" code to remove.
 // Step 27's file + score_key_bytes. Code now SAME as REF's types.hpp except loss, gain,
 // doubling (Phase 6, histories).
 #pragma once
@@ -44,5 +45,6 @@ struct Model {
     // Exact chromosome scores, key = score_key(x, y, k, j, directed) (bounds.hpp). Only finished
     // searches are stored; a search stopped by its cap proves nothing. Bounded by cache_score; kept across rows.
     std::unordered_map<std::string, double> chromosome_scores;
+    // >>> Step 31: add 1 line
     size_t score_key_bytes = 0; // total length of the keys in chromosome_scores (cache_score)
 };

@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 23 (not part of REF; untracked). Goes to medicc/fstengine/src/scoring.hpp.
+// REFERENCE for migration Step 23 (not part of REF's code). Goes to medicc/fstengine/src/scoring.hpp.
+// Markers: ">>> Step 23" new or changed code, ending at "<<< Step 23" (one-line changes have no end); "--- Step 23" code to remove.
 // Your Step 9 file; score() now splits the strings at X and adds chromosome scores.
 // Left out until later steps:
 //   score cache: score_key / cached_score / cache_score, the x > y swap in fixed()  (Step 24)
@@ -8,8 +9,10 @@
 
 #include <algorithm>
 #include <string>
+// >>> Step 23: add 2 lines
 #include <utility>
 #include <vector>
+// <<< Step 23
 
 #include "types.hpp"
 #include "fst_operations.hpp"
@@ -35,6 +38,7 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     // One segment per chromosome (the X itself is dropped: A and AD restart there). Inside a
     // chromosome, a column equal to the previous one in BOTH strings is dropped too: the
     // events that change the previous column can always cover it at no extra cost.
+    // >>> Step 23: add 14 lines
     std::vector<std::pair<std::string, std::string>> segments(1);
     for (size_t i = 0; i < x.size(); ++i) {
         if (x[i] == 'X') {
@@ -50,8 +54,10 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     // Shortest first: cheap segments use up the budget early and stop a hopeless (k, j) sooner.
     std::stable_sort(segments.begin(), segments.end(),
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
+    // <<< Step 23
     double best = infinity;
     for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k) // directed: no edge above x
+        // >>> Step 23: change 9 lines (was 2)
         for (int j = 0; j <= m.max_wgds; ++j) {
             double total = k + j;
             for (auto &[a, b] : segments) {
@@ -62,5 +68,6 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
             }
             best = std::min(best, total);
         }
+        // <<< Step 23
     return best;
 }

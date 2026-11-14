@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 21 (not part of REF; untracked). Goes to medicc/test_medicc.py in NEW.
+# REFERENCE for migration Step 21 (not part of REF's code). Goes to medicc/test_medicc.py in NEW.
 # It is NEW's committed file (master) with only this step's changes; see the plan for the step.
 # Phase 4: one change, test_medicc_distance_speed_up loads the old WGD FST explicitly
 # (calc_MED_distance needs an fstlib FST). Run only the tests without --events:

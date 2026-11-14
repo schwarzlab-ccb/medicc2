@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 18 (not part of REF; untracked). Goes to medicc/__init__.py.
+# REFERENCE for migration Step 18 (not part of REF's code). Goes to medicc/__init__.py.
 # One added line: import medicc.fstengine (REF also adds import medicc.nni: that is Phase 7).
 
 import logging.config

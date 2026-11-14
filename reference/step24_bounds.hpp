@@ -1,5 +1,5 @@
 #pragma once
-// REFERENCE for migration Step 24 (not part of REF; untracked). Goes to medicc/fstengine/src/bounds.hpp (new).
+// REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/src/bounds.hpp (new).
 // The first two functions of REF's bounds.hpp: the key of the score cache and a store without a
 // size limit. Left out until later steps:
 //   cached_score, changes / doubled / witness, string_lower, language_lower, BlockBounds,

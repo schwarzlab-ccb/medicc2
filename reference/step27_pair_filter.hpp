@@ -1,5 +1,5 @@
 #pragma once
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to medicc/fstengine/src/pair_filter.hpp (new).
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to medicc/fstengine/src/pair_filter.hpp (new).
 // REF's pair_filter.hpp with OpenFST's DEFAULT matcher and composition filter (what ComposeFst
 // uses when you do not choose): Step 30 changes only these two `using` lines to
 // fst::SortedMatcher<Fst> and fst::NullComposeFilter<PairMatcher>. Code otherwise SAME as REF.

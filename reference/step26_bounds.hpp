@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 26 (not part of REF; untracked). Goes to medicc/fstengine/src/bounds.hpp.
+// REFERENCE for migration Step 26 (not part of REF's code). Goes to medicc/fstengine/src/bounds.hpp.
+// Markers: ">>> Step 26" new or changed code, ending at "<<< Step 26" (one-line changes have no end); "--- Step 26" code to remove.
 // REF's bounds.hpp WITHOUT the size limit of cache_score (Step 31: 65536 entries, 8 MiB of keys,
 // score_key_bytes); cache_score stays your Step 24 version. Comments added; code otherwise SAME as REF.
 
@@ -8,18 +9,23 @@
 // L_LOH model at segment boundaries (tables in chromosome_constants.hpp, made
 // by tools/generate_chromosome_bound.py). Branches are the 3x3 combinations of
 // WGD counts on the two sides of a join or pair score.
+// >>> Step 26: add 4 lines
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <numeric>
+// <<< Step 26
 #include <string>
 #include <utility>
+// >>> Step 26: add 1 line
 #include <vector>
 
 #include "types.hpp"
+// >>> Step 26: add 3 lines
 #include "fst_operations.hpp" // layers
 #include "search.hpp"         // choose
 #include "chromosome_constants.hpp"
+// <<< Step 26
 
 // "K" or "D", the WGD counts, then the two strings. K(x, y) with (k, j) equals K(y, x) with
 // (j, k), so undirected keys are stored in one order only: x <= y.
@@ -37,6 +43,7 @@ static void cache_score(Model &m, std::string key, double value) {
 }
 
 // The cached exact score, or -1 if there is none.
+// >>> Step 26: add 172 lines
 static double cached_score(Model &m, const std::string &x, const std::string &y, int k, int j,
                            bool directed) {
     auto found = m.chromosome_scores.find(score_key(x, y, k, j, directed));
@@ -214,3 +221,4 @@ branch_order(Model &model, const std::vector<BlockBounds> &blocks, bool directed
     });
     return order;
 }
+// <<< Step 26

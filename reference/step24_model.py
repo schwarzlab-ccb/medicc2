@@ -1,4 +1,5 @@
-"""REFERENCE for migration Step 24 (not part of REF; untracked). Goes to medicc/fstengine/model.py.
+"""REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/model.py.
+Markers: ">>> Step 24" new or changed code, ending at "<<< Step 24" (one-line changes have no end); "--- Step 24" code to remove.
 Your current file + 'fstengine_clear' in the signatures + Model.clear(). Left out until later
 steps: _finish_row() (Step 31), history() (Step 33), am_start/am_final/am_arc/am_import (Step 41).
 
@@ -63,6 +64,7 @@ def library():
         'fstengine_join': (p, [p, p, p]),
         'fstengine_resolve': (s, [p, s, p, ctypes.POINTER(d)]),
         'fstengine_score': (d, [p, s, s, i]),
+        # >>> Step 24: add 1 line
         'fstengine_clear': (None, [p]),
     }
     for name, (result, arguments) in signatures.items():
@@ -168,10 +170,12 @@ class Model:
             raise RuntimeError(self.lib.am_error().decode())
         return value
 
+    # >>> Step 24: add 3 lines
     def clear(self):
         """Forget the cached chromosome scores of this handle (answers stay the same)."""
         self.check_open()
         self.lib.fstengine_clear(self.handle)
+    # <<< Step 24
 
     def close(self):
         if getattr(self, 'handle', None):

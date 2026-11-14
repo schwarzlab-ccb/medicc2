@@ -1,4 +1,4 @@
-// REFERENCE for migration Step 29 (not part of REF; untracked). Goes to tests/migration/test_29_certify.cpp.
+// REFERENCE for migration Step 29 (not part of REF's code). Goes to tests/migration/test_29_certify.cpp.
 // The plan's test: a capped search that finds nothing is not cached; a certified witness is.
 // Run: ./test_fstengine.sh 29
 #include <cassert>

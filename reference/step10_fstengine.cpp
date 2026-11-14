@@ -1,4 +1,4 @@
-// REFERENCE for migration Step 10 (not part of REF; untracked). It is REF's native.cpp reduced
+// REFERENCE for migration Step 10 (not part of REF's code). It is REF's native.cpp reduced
 // to what Steps 8-11 need. Left out until later steps:
 //   am_start / am_final / am_arc / am_import (message inspection for test_fstengine.py, Step 41)
 //   fstengine_history (Step 33), fstengine_finish_row / fstengine_clear (score cache, Steps 24/31)

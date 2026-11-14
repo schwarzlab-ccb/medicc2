@@ -1,5 +1,5 @@
 #pragma once
-// REFERENCE for migration Step 9 (not part of REF; untracked). It is REF's scoring.hpp reduced
+// REFERENCE for migration Step 9 (not part of REF's code). It is REF's scoring.hpp reduced
 // to the simplest correct engine: one whole-string search per WGD choice, no speed-ups.
 // Left out until later steps:
 //   splitting at X + shortening repeated columns  (Step 23)

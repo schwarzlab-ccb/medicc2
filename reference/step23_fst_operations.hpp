@@ -1,4 +1,5 @@
-// REFERENCE for migration Step 23 (not part of REF; untracked). Goes to medicc/fstengine/src/fst_operations.hpp.
+// REFERENCE for migration Step 23 (not part of REF's code). Goes to medicc/fstengine/src/fst_operations.hpp.
+// Markers: ">>> Step 23" new or changed code, ending at "<<< Step 23" (one-line changes have no end); "--- Step 23" code to remove.
 // Your current file + Layers / layers() (copied from REF's fst_operations.hpp, plus a comment).
 // From here on this file is final: it equals REF's fst_operations.hpp apart from comments and
 // the #include "types.hpp".
@@ -49,6 +50,7 @@ static void compatible(const std::string &x, const std::string &y) {
 // The states of a fixed-length message, layer by layer: states[d] = states after d symbols.
 // after_x[d]: every arc into layer d reads X (d > 0), so layer d starts a new chromosome.
 // split() (messages.hpp) cuts two messages where both have one state after an X.
+// >>> Step 23: add 34 lines
 struct Layers {
     std::vector<std::vector<int>> states;
     std::vector<int> depth;
@@ -83,6 +85,7 @@ static Layers layers(const Message &m) {
         }
     return out;
 }
+// <<< Step 23
 
 static Ptr sorted(const Fst &f) {
     return std::make_unique<fst::ArcSortFst<Arc, fst::ILabelCompare<Arc>>>(

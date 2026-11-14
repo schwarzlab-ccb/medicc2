@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 30 (not part of REF; untracked). Goes to medicc/fstengine/src/pair_filter.hpp.
+// REFERENCE for migration Step 30 (not part of REF's code). Goes to medicc/fstengine/src/pair_filter.hpp.
+// Markers: ">>> Step 30" new or changed code, ending at "<<< Step 30" (one-line changes have no end); "--- Step 30" code to remove.
 // Step 27's file with the two `using` lines below changed: fst::SortedMatcher and
 // fst::NullComposeFilter. Code now SAME as REF's pair_filter.hpp (only #includes added).
 // Pair graphs contain no epsilon arcs: all primitives and linear profiles
@@ -18,8 +19,10 @@
 #include "fst_operations.hpp" // linear, sorted, compose, check
 #include "astar.hpp"          // Heuristic
 
+// >>> Step 30: change 2 lines (was 2)
 using PairMatcher = fst::SortedMatcher<Fst>;
 using PairFilter = fst::NullComposeFilter<PairMatcher>;
+// <<< Step 30
 using PairStateTable = fst::GenericComposeStateTable<Arc, PairFilter::FilterState>;
 
 // Scalar pair scores through OpenFST's composition-filter extension. Each CN

@@ -1,6 +1,6 @@
 #pragma once
 
-// REFERENCE for migration Step 8 (not part of REF; untracked). It is REF's messages.hpp reduced
+// REFERENCE for migration Step 8 (not part of REF's code). It is REF's messages.hpp reduced
 // to the simplest correct engine. Left out until later steps: split/slice/layers (Step 23), bounds and
 // branch order (Steps 24/26), Heuristic (Step 27), tracked_compose (Step 32).
 // Needs `struct Model { Vec a, ad; int max_wgds = 2; };` in types.hpp.

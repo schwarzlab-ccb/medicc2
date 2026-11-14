@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 27 (not part of REF; untracked). Goes to medicc/fstengine/src/scoring.hpp.
+// REFERENCE for migration Step 27 (not part of REF's code). Goes to medicc/fstengine/src/scoring.hpp.
+// Markers: ">>> Step 27" new or changed code, ending at "<<< Step 27" (one-line changes have no end); "--- Step 27" code to remove.
 // Step 26's file; fixed() searches pairs (directed = false) on the filtered pair graph with A*.
 // Left out until later steps: greedy_pair, room = ... - 1, certify  (Step 29)
 
@@ -10,8 +11,10 @@
 
 #include "types.hpp"
 #include "fst_operations.hpp"
+// >>> Step 27: add 2 lines
 #include "astar.hpp"       // make_graph
 #include "pair_filter.hpp" // make_pair_graph
+// <<< Step 27
 #include "search.hpp"
 #include "messages.hpp"
 #include "bounds.hpp"
@@ -31,6 +34,7 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
     const auto known = m.chromosome_scores.find(key);
     if (known != m.chromosome_scores.end())
         return known->second;
+    // >>> Step 27: add 5 lines
     double value;
     if (!directed) {
         // Pairs: A* on the filtered pair graph (pair_filter.hpp). The filter reads the cap from
@@ -38,11 +42,14 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
         auto graph = make_pair_graph(m, x, y, k, j, cap);
         value = search(*graph.exact, cap, false, graph.heuristic.get(), graph.budget.get()).cost;
     } else {
+    // <<< Step 27
         // Directed scores stay plain bounded Dijkstra, like join() and resolve().
         Message a{linear(x), 0, int(x.size())}, b{linear(y), 0, int(y.size())};
         auto graph = make_graph(m, a, b, k, j, directed);
+        // >>> Step 27: change 2 lines (was 1)
         value = search(*graph, cap, false).cost;
     }
+        // <<< Step 27
     // A finite result is the exact optimum. infinity only says "more than cap": not cached.
     if (std::isfinite(value))
         cache_score(m, key, value);

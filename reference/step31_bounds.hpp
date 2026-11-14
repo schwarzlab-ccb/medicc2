@@ -1,5 +1,6 @@
 #pragma once
-// REFERENCE for migration Step 31 (not part of REF; untracked). Goes to medicc/fstengine/src/bounds.hpp.
+// REFERENCE for migration Step 31 (not part of REF's code). Goes to medicc/fstengine/src/bounds.hpp.
+// Markers: ">>> Step 31" new or changed code, ending at "<<< Step 31" (one-line changes have no end); "--- Step 31" code to remove.
 // Step 26's file with REF's cache_score (size limit). Code now SAME as REF's bounds.hpp
 // (comments and #includes added).
 
@@ -34,6 +35,7 @@ static std::string score_key(std::string x, std::string y, int k, int j, bool di
 // rows, so bound both the number of entries and the bytes of key text: when full, forget
 // everything and start again. Clearing only forgets exact answers; results never change.
 static void cache_score(Model &m, std::string key, double value) {
+    // >>> Step 31: change 11 lines (was 1)
     constexpr size_t max_entries = 65536, max_key_bytes = 8 << 20;
     if (key.size() > max_key_bytes)
         return;
@@ -45,6 +47,7 @@ static void cache_score(Model &m, std::string key, double value) {
     auto inserted = m.chromosome_scores.emplace(std::move(key), value);
     if (inserted.second)
         m.score_key_bytes += inserted.first->first.size();
+    // <<< Step 31
 }
 
 // The cached exact score, or -1 if there is none.

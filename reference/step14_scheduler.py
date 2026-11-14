@@ -1,4 +1,4 @@
-# REFERENCE for migration Step 14 (not part of REF; untracked). Goes to medicc/fstengine/scheduler.py in NEW.
+# REFERENCE for migration Step 14 (not part of REF's code). Goes to medicc/fstengine/scheduler.py in NEW.
 # It is NEW's committed file (master) with only this step's changes; see the plan for the step.
 # REF's medicc/native/scheduler.py with native -> fstengine, minus two Phase 5 speed-ups:
 # column shortening (shortening.prepare/pair, Step 28) and model._finish_row() (score cache, Step 31).

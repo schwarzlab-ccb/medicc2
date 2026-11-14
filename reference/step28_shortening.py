@@ -1,6 +1,6 @@
 """Column shortening for pair distances.
 
-REFERENCE for migration Step 28 (not part of REF; untracked). Goes to medicc/fstengine/shortening.py (new).
+REFERENCE for migration Step 28 (not part of REF's code). Goes to medicc/fstengine/shortening.py (new).
 SAME as REF's medicc/native/shortening.py (only this note added).
 
 A column is dropped if it repeats the previous column in both profiles (as in
