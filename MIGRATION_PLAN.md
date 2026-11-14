@@ -78,11 +78,13 @@ Two lessons from those records:
 * Your file does not need to match REF line by line. It must give the same **answers**.
 * For a file that exists in master, change only what the step needs.
 * **Speed steps never change answers.** Each one re-runs the golden test (Step 11) and the timing (Step 22).
-* **References.** From Step 7 on, each step names a checked reference file in REF's untracked folder
+* **References.** From Step 7 on, each step names a checked reference file in REF's folder
   `../medicc-full-fst-lloh-wgd2-capped-x2/reference/` (`stepNN_<file>`). Each one is the **smallest**
   version that is correct for that step: it builds, passes the step's tests and gives the same answers
   as the steps before. Its header says what is left out until later. It is a peek, like REF. See the
-  [table of how close each one is to REF](#references).
+  [table of how close each one is to REF](#references). From Step 23 on, a reference that changes an
+  existing file marks the changes against the previous version: `>>> Step NN` starts new or changed
+  code, `<<< Step NN` ends it, `--- Step NN` marks code to remove.
 
 ### <a id="names"></a>Names: `fstengine`, not `native`
 
@@ -906,9 +908,16 @@ Save the results of the first run (distances, tree length) and check that later 
 * **Test:** `test_11` + bench; create `tests/migration/test_23_split.cpp`
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step23_fst_operations.hpp` — final (= REF).
-  * `step23_messages.hpp` — split + blockwise join / resolve, no bounds.
+  * `step23_messages.hpp` — split + join / resolve chromosome by chromosome, no bounds.
   * `step23_scoring.hpp` — split at X + drop repeated columns, no cache or bounds.
   * `step23_test_split.cpp` — test
+* **Order** (follow the `>>> Step 23` markers in each reference):
+  1. `fst_operations.hpp`: add `Layers` and `layers()` (one block).
+  2. `messages.hpp`: the `#include`s, `slice()` and `split()`, then `join()` and `resolve()` work chromosome by chromosome.
+  3. `scoring.hpp`: `score()` cuts the strings at `X`, drops repeated columns, sorts the pieces.
+  4. Build (`python setup.py build_ext --inplace`), then `python -B tests/migration/test_11_fstengine_vs_oracle.py`.
+  5. Create `tests/migration/test_23_split.cpp`; run `./test_fstengine.sh 23`.
+  6. Bench: `python -B tests/migration/bench.py` (same answers), then `--chromosomes 0` once to save all of meso5.
 
 **Problem.** A long profile gives one huge search. But `A` and `AD` restart at each `X`.
 **Idea.** For a **fixed** WGD choice, costs add over chromosomes. So search each chromosome alone and add.
@@ -921,9 +930,9 @@ Score the shortest chromosomes first: a cheap piece fills the budget early and s
 ```cpp
 int main() {
     Message a{linear("1X2"), 0, 3}, b{linear("2X3"), 0, 3};
-    auto blocks = split(a, b);
-    assert(blocks.size() == 2);
-    assert(blocks[0].first.length == 2 && blocks[1].first.length == 1);
+    auto chromosomes = split(a, b);
+    assert(chromosomes.size() == 2);
+    assert(chromosomes[0].first.length == 2 && chromosomes[1].first.length == 1);
 }
 ```
 
@@ -939,7 +948,10 @@ Also test empty chromosomes: `"1XX2"`.
 * **Create in NEW:** `medicc/fstengine/src/bounds.hpp`
 * **Edit in NEW:**
   * `medicc/fstengine/src/types.hpp`
-  * `medicc/fstengine/src/fstengine.cpp` (`#include "bounds.hpp"`)
+  * `medicc/fstengine/src/scoring.hpp`
+  * `medicc/fstengine/src/fstengine.cpp` (`#include "bounds.hpp"`, `fstengine_clear`)
+  * `medicc/fstengine/model.py`
+  * `medicc/fstengine/scheduler.py`
 * **Test:** `test_11` + bench; create `tests/migration/test_24_cache.cpp`
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step24_types.hpp`
@@ -949,6 +961,14 @@ Also test empty chromosomes: `"1XX2"`.
   * `step24_model.py` — + `clear()`.
   * `step24_scheduler.py` — `model.clear()` after each row.
   * `step24_test_cache.cpp` — test
+* **Order** (follow the `>>> Step 24` markers):
+  1. `types.hpp`: `Model` gets `chromosome_scores`.
+  2. `bounds.hpp` (new): `score_key()` and `cache_score()`.
+  3. `scoring.hpp`: `#include "bounds.hpp"`; `fixed()` swaps `x > y` and uses the cache.
+  4. `fstengine.cpp`: `#include "bounds.hpp"` and `fstengine_clear()`. Build (`python setup.py build_ext --inplace`), then `python -B tests/migration/test_11_fstengine_vs_oracle.py`.
+  5. `model.py`: `fstengine_clear` in the signatures, `Model.clear()`.
+  6. `scheduler.py`: `model.clear()` after each row.
+  7. Create `tests/migration/test_24_cache.cpp`; run `./test_fstengine.sh 24`. Then the bench.
 
 **Problem.** The same chromosome pairs come back again and again in a distance matrix.
 **Idea.** A cache in `Model`: key = `(x, y, k, j, directed)` → cost (`score_key`, `cached_score`). `fstengine_clear` empties it.
@@ -970,6 +990,10 @@ For now the cache has no size limit, and the scheduler clears it after each row.
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step25_generate_chromosome_bound.py` — **same as REF** (output path only).
   * `step25_chromosome_constants.hpp` — **byte-identical to REF** (generated; you make it with the script).
+* **Order:**
+  1. Type `tools/generate_chromosome_bound.py`.
+  2. Run it: it writes `medicc/fstengine/src/chromosome_constants.hpp`. Nothing includes it yet (Step 26 does).
+  3. Run it again and check that the file did not change, then `cmp` with REF's (see Test).
 
 **Problem.** For bounds you need the cheapest possible cost between two neighbouring columns, for each WGD pair `(k_left, k_right)` (9 pairs).
 **Idea.** Compute it once in Python (min-plus over the copy-number transitions). Write it as C++ constants into `medicc/fstengine/src/chromosome_constants.hpp`. The WGD charge is **not** in the table.
@@ -979,14 +1003,28 @@ For now the cache has no size limit, and the scheduler clears it after each row.
 
 **Files** (paths from NEW's root)
 
-* **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/bounds.hpp`
-* **Edit in NEW:** `medicc/fstengine/src/bounds.hpp`
+* **Read in REF:**
+  * `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/bounds.hpp`
+  * `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/scoring.hpp`
+  * `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/messages.hpp`
+* **Edit in NEW:**
+  * `medicc/fstengine/src/bounds.hpp`
+  * `medicc/fstengine/src/scoring.hpp`
+  * `medicc/fstengine/src/messages.hpp`
 * **Test:** `test_11` + bench; create `tests/migration/test_26_bounds.cpp`
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step26_bounds.hpp` — REF minus the cache size limit.
   * `step26_messages.hpp` — `join` / `resolve` **same as REF**.
   * `step26_scoring.hpp` — REF's `score` with `room = min(best - other, upper)`, no certify.
   * `step26_test_bounds.cpp` — test
+* **Order** (follow the `>>> Step 26` markers):
+  1. `bounds.hpp`: the `#include`s (with `chromosome_constants.hpp` from Step 25), then the one big block:
+     `cached_score`, `changes` / `doubled` / `witness`, `string_lower` / `language_lower`, `ChromosomeBounds`,
+     `message_bounds`, `branch_order`. It builds now; nothing uses it yet.
+  2. `messages.hpp`: `#include "bounds.hpp"`; `join()` and `resolve()` use the bounds.
+  3. `scoring.hpp`: `score()` computes the bounds per piece and tries WGD choices in `branch_order`.
+  4. Build (`python setup.py build_ext --inplace`), then `python -B tests/migration/test_11_fstengine_vs_oracle.py`.
+  5. Create `tests/migration/test_26_bounds.cpp`; run `./test_fstengine.sh 26`. Then the bench.
 
 **Problem.** The search does not know early that a WGD choice is hopeless.
 **Idea.**
@@ -1036,6 +1074,23 @@ int main() {
   * `step27_scoring.hpp`
   * `step27_fstengine.cpp` — + `a_even`.
   * `step27_test_astar.cpp` — test
+* **Order** (follow the `>>> Step 27` / `--- Step 27` markers; the include order is
+  `types` → `fst_operations` → `astar` → `pair_filter` → `search` → `bounds` → `messages` → `scoring`):
+  1. `types.hpp`: declare `struct SuffixData;`; `Model` gets `a_even` and `suffix_cache`.
+  2. `astar.hpp` (new): `Heuristic`, and **move** `branch_graph` / `make_graph` here from `messages.hpp`
+     (copy them now, delete them from `messages.hpp` in item 5).
+  3. `pair_filter.hpp` (new): `ComposeBudget`, `SuffixData`, `CostComposeFilter`, `make_pair_graph`.
+  4. `search.hpp`: `#include "astar.hpp"` and `"pair_filter.hpp"`; the queue takes `Heuristic*` and
+     `ComposeBudget*`; `search()` gets the two extra arguments (default `nullptr` = plain Dijkstra);
+     de-duplicate `settled` at the end.
+  5. `messages.hpp`: delete `branch_graph` / `make_graph` and `#include <fst/project.h>`; `#include "astar.hpp"`.
+     Build now (`python setup.py build_ext --inplace`) and run `python -B tests/migration/test_11_fstengine_vs_oracle.py`:
+     nothing uses A* yet, so the answers must not change.
+  6. `scoring.hpp`: the two `#include`s; `fixed()` uses `make_pair_graph` when not directed.
+  7. `fstengine.cpp`: the two `#include`s, build `a_even` in `load_model()`, clear `suffix_cache` in `fstengine_clear()`.
+  8. Build, then `python -B tests/migration/test_11_fstengine_vs_oracle.py`.
+  9. Create `tests/migration/test_27_astar.cpp`; run `./test_fstengine.sh 27`. Then the bench
+     (a note about other ancestral profiles is expected here: another tie, same tree length).
 
 **Problem.** For a pair, OpenFST still builds composition states that cannot fit the cap. Dijkstra also looks at states that cannot lead to a cheap answer.
 **Idea.**
@@ -1070,11 +1125,17 @@ This is where the big speed-up came in the real history.
 
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/shortening.py`
 * **Create in NEW:** `medicc/fstengine/shortening.py`
+* **Edit in NEW:** `medicc/fstengine/scheduler.py`
 * **Test:** create `tests/migration/test_28_shortening.py`
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step28_shortening.py` — **same as REF**.
   * `step28_scheduler.py`
   * `step28_test_shortening.py` — test
+* **Order:**
+  1. `shortening.py` (new): `prepare()` and `pair()`.
+  2. Create `tests/migration/test_28_shortening.py`; run `python -B tests/migration/test_28_shortening.py`.
+  3. `scheduler.py` (follow the `>>> Step 28` markers): import `shortening`, `prepare` each sample once, score `pair(...)`.
+  4. `python -B tests/migration/test_11_fstengine_vs_oracle.py`, then the bench. No build needed: only Python changed.
 
 **Problem.** In a pair, many columns are the same as their neighbour in **both** profiles.
 **Idea.** `prepare(profile)` marks where each profile changes (once per sample). `pair(left, right)` keeps only columns where **either** changes, and always keeps `X`. Only for pair distances. Hook: the scheduler uses it.
@@ -1106,6 +1167,8 @@ print("PASS step 28")
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step29_scoring.hpp` — final (= REF).
   * `step29_test_certify.cpp` — test
+* **Order** (follow the `>>> Step 29` markers): `greedy_pair()` first, then `fixed()`, then `room` and the
+  certify block in `score()`. Build, `test_11`, create the test and run `./test_fstengine.sh 29`, bench.
 
 **Problem.** Often the upper bound from Step 26 is already the true answer. The search still works hard to find that same cost again.
 **Idea.** Costs are whole numbers. So ask a smaller question: "Is there a path that is **strictly cheaper**?"
@@ -1140,10 +1203,11 @@ print("PASS step 28")
   * `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/scheduler.py`
   * `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/model.py`
 * **Edit in NEW:**
+  * `medicc/fstengine/src/types.hpp`
   * `medicc/fstengine/src/bounds.hpp`
   * `medicc/fstengine/src/fstengine.cpp`
-  * `medicc/fstengine/scheduler.py`
   * `medicc/fstengine/model.py`
+  * `medicc/fstengine/scheduler.py`
 * **Test:** `test_11` + bench; create `tests/migration/test_31_cache.py`
 * **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
   * `step31_types.hpp` — REF minus `loss` / `gain` / `doubling` (Phase 6).
@@ -1152,6 +1216,13 @@ print("PASS step 28")
   * `step31_model.py` — + `_finish_row()`.
   * `step31_scheduler.py` — final (= REF).
   * `step31_test_cache.py` — test
+* **Order** (follow the `>>> Step 31` markers):
+  1. `types.hpp`: `Model` gets `score_key_bytes`.
+  2. `bounds.hpp`: `cache_score()` gets the size limit.
+  3. `fstengine.cpp`: `fstengine_finish_row()`; `fstengine_clear()` also resets `score_key_bytes`. Build, then `python -B tests/migration/test_11_fstengine_vs_oracle.py`.
+  4. `model.py`: `fstengine_finish_row` in the signatures, `Model._finish_row()`.
+  5. `scheduler.py`: `model._finish_row()` instead of `model.clear()`.
+  6. Create `tests/migration/test_31_cache.py`; run it. Then the bench and the phase check below.
 
 **Problem.** Step 24 clears the cache after each matrix row. But the next row asks many of the same chromosome pairs.
 If you keep it forever, memory grows without limit.
@@ -1433,7 +1504,7 @@ reference, mostly later steps (bounds, A*, cache) or later phases (histories, me
 | 21 | `step21_test_medicc.py` | 99% | 14 | part of REF (no Phase 6/7 tests) |
 | 22 | `step22_bench.py` | 22% | 99 | own version: REF's benchmark is for PGO builds |
 | 23 | `step23_fst_operations.hpp` | 99% | 1 | **same as REF** (final) |
-| 23 | `step23_messages.hpp` | 80% | 32 | own version: blockwise `join`, no bounds |
+| 23 | `step23_messages.hpp` | 80% | 32 | own version: `join` chromosome by chromosome, no bounds |
 | 23 | `step23_scoring.hpp` | 77% | 87 | own version: split, no cache / bounds |
 | 24 | `step24_types.hpp` | 94% | 4 | part of REF |
 | 24 | `step24_bounds.hpp` | 91% | 183 | part of REF (2 functions; `cache_score` without size limit) |
