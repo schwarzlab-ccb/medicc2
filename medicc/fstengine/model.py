@@ -17,7 +17,7 @@ _library = None
 
 @dataclass(frozen=True)
 class ModelConfig:
-    """Selects the model. Frozen, so it can be hashed and sent to worker processess.
+    """Selects the model. Frozen, so it can be hashed and sent to worker processes.
 
     ''no_wgd'' restricts the model to A (losses followed by gains, no WGD).
     ''total_copy_numbers'' only states the data mode; the model is the same

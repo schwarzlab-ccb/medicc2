@@ -1,4 +1,4 @@
-// fstengine: the C interface used by medicc/fstngine/model.py (ctypes)
+// fstengine: the C interface used by medicc/fstengine/model.py (ctypes)
 // The model is P = A + ADA + ADADA with A = L_LOH o G and the capped doubling D(c) = min(2c, 8);
 // each WGD costs 1. All headers are included here once: one translation unit, one OpenFST build.
 // C functions never throw (an exception must not cross into C / Python): on an error they store

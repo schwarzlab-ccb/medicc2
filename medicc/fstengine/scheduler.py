@@ -68,7 +68,7 @@ def pairwise_distances(cn_str_dict, config, n_cores=1):
     return pd.DataFrame(distances, index=samples, columns=samples)
 
 def reconstruct(children, leaves, root, normal, config, n_cores = 1):
-    """Reconstrct one optimal set of ancestral profiles on a rooted binary tree.
+    """Reconstruct one optimal set of ancestral profiles on a rooted binary tree.
 
     The up pass joins the child message of every internal node (all minimum-cost
     ancestors), the down pass resolves the root against the normal and then every
@@ -77,13 +77,13 @@ def reconstruct(children, leaves, root, normal, config, n_cores = 1):
     Args:
         children (dict): Internal node name -> list of its two child names (normal excluded).
         leaves (dict): Leaf name -> copy-number profile
-        root (str): Name of the root (the most recent common ancstor of all leaves).
+        root (str): Name of the root (the most recent common ancestor of all leaves).
         normal (str): Copy-number profile of the normal sample (parent of the root).
         config (ModelConfig): Model selection.
         n_cores (int, optional): Number of worker threads. Defaults to 1.
 
     Returns:
-        dict: Profiles of all elaves and internal nodes
+        dict: Profiles of all leaves and internal nodes
 
     Raises:
         ValueError: If the tree is not binary or its leaves do not match ``leaves``
