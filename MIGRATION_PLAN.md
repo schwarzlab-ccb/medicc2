@@ -18,6 +18,7 @@ with an idea (and no finished code) would build it. Older plans (only on the oth
 * [Phase 6 — Tell the story: event histories](#phase-6) (Steps 32–35)
 * [Phase 7 — Better trees: NNI and FastME](#phase-7) (Steps 36–40)
 * [Phase 8 — Ship it](#phase-8) (Steps 41–46)
+* [References: how close each one is to REF](#references)
 * [Appendix: what we keep and what we never build](#appendix)
 
 ---
@@ -77,6 +78,11 @@ Two lessons from those records:
 * Your file does not need to match REF line by line. It must give the same **answers**.
 * For a file that exists in master, change only what the step needs.
 * **Speed steps never change answers.** Each one re-runs the golden test (Step 11) and the timing (Step 22).
+* **References.** From Step 7 on, each step names a checked reference file in REF's untracked folder
+  `../medicc-full-fst-lloh-wgd2-capped-x2/reference/` (`stepNN_<file>`). Each one is the **smallest**
+  version that is correct for that step: it builds, passes the step's tests and gives the same answers
+  as the steps before. Its header says what is left out until later. It is a peek, like REF. See the
+  [table of how close each one is to REF](#references).
 
 ### <a id="names"></a>Names: `fstengine`, not `native`
 
@@ -466,6 +472,7 @@ int main() {
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/search.hpp`
 * **Create in NEW:** `medicc/fstengine/src/search.hpp`
 * **Test:** create `tests/migration/test_07_search.cpp`
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step07_search.hpp` — REF's `search.hpp` without A* (Heuristic, ComposeBudget, `original_ids`).
 
 **Problem.** You need the best cost through a lazy graph. For ancestors you need **every** best path, not one.
 And you want to stop early when a search cannot beat a known cost (`cap`).
@@ -500,6 +507,11 @@ int main() {
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/messages.hpp`
 * **Create in NEW:** `medicc/fstengine/src/messages.hpp`
 * **Test:** none yet (Step 11)
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step08_messages.hpp` — the simplest correct `join` / `resolve`: no splitting, no bounds.
+  * `check_step08.cpp` — checker
+  * `step08_golden.txt` — its data
+  * `step08_optimum.txt` — its data
 
 **Problem.** For a tree you need two operations: bottom-up **join** and top-down **resolve**.
 **Idea.**
@@ -520,6 +532,7 @@ int main() {
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/scoring.hpp`
 * **Create in NEW:** `medicc/fstengine/src/scoring.hpp`
 * **Test:** none yet (Step 11)
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step09_scoring.hpp` — one whole-string search per WGD choice, capped at `best - k - j`.
 
 **Problem.** The tree builder needs `T(x, y)` and `K(x, y)` for profile strings.
 **Idea.** `fixed(model, x, y, k, j, directed)` = one search for one WGD choice. `score(model, x, y, directed)` = minimum over all choices, plus WGD costs.
@@ -534,6 +547,7 @@ Directed: `x` is the parent, so only the child side has edges. Symmetric: both s
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/native.cpp`
 * **Create in NEW:** `medicc/fstengine/src/fstengine.cpp` (the build writes `medicc/fstengine/_fstengine.so`)
 * **Test:** create `tests/migration/test_10_fstengine.cpp`
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step10_fstengine.cpp` — the C interface for Steps 8–11 only (no cache, history or message inspection).
 
 **Problem.** Python cannot call C++ functions directly. And the model file must be read.
 **Idea.** `#include` all headers once. `load_model(path)` reads your Step 4 file (add 1 to each label).
@@ -575,6 +589,7 @@ int main() {
   * `medicc/fstengine/__init__.py` (empty for now)
   * `medicc/fstengine/model.py`
 * **Test:** create `tests/migration/test_11_fstengine_vs_oracle.py`
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step11_model.py` — REF's `model.py` minus `history`, `clear`, `_finish_row`, `am_*` inspection.
 
 **Problem.** You want to call the engine from Python, and compare it with the oracle on all 81×81 pairs.
 **Idea.** `ctypes`: find `_fstengine*.so` next to the file, declare each function's argument and return types.
@@ -631,6 +646,7 @@ Run the full suite after Phase 5.
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/setup.py`
 * **Edit in NEW:** `setup.py`
 * **Test:** a build command, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step12_setup.py` — master's `setup.py` + the fstengine `Extension` (REF's PGO build left out).
 
 **Problem.** The hand build command (Step 10) is easy to forget.
 **Idea.** Add a third `Extension("medicc.fstengine._fstengine", ["medicc/fstengine/src/fstengine.cpp"], ...)` next to the two fstlib ones.
@@ -644,6 +660,7 @@ C++17, `-O3`, link `fst`, same include/lib/rpath handling. It is loaded by ctype
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/pyproject.toml` (only its `packages` and `package-data`)
 * **Edit in NEW:** `setup.py` (`pyproject.toml` stays as it is)
 * **Test:** build a wheel and look inside, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step13_setup.py` — Step 12 + `packages` / `package_data`.
 
 **Problem.** `pip install .` would leave out `medicc.fstengine`, the `.hpp` files and `ancestral_parts.txt`.
 **Idea.** In `setup.py`: add `'medicc.fstengine'` to `packages`; in `package_data` add `"objects/*.txt"` to `"medicc"` and a new entry `"medicc.fstengine": ["src/*.hpp", "src/*.cpp"]`.
@@ -664,6 +681,9 @@ pip wheel . --no-deps --no-build-isolation -w /tmp/wheel -q && python -c "import
 * **Create in NEW:** `medicc/fstengine/scheduler.py`
 * **Edit in NEW:** `medicc/fstengine/__init__.py`
 * **Test:** create `tests/migration/test_14_scheduler.py`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step14_scheduler.py` — REF's scheduler minus shortening (Step 28) and `_finish_row` (Step 31).
+  * `step14_init.py` — **same as REF**.
 
 **Problem.** A tree needs all pair distances, and one join per inner node. One thread is slow.
 **Idea.** `pairwise_distances(cn_str_dict, config, n_cores)` → a symmetric `DataFrame` in sample order.
@@ -697,6 +717,7 @@ print("PASS step 14")
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/io.py`
 * **Edit in NEW:** `medicc/io.py`
 * **Test:** create `tests/migration/test_15_io.py`
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step15_io.py` — REF's `read_fst` / `validate_input` changes only.
 
 **Problem.** `read_fst()` builds master's old fstlib model.
 **Idea.** `read_fst(no_wgd=False, total_copy_numbers=False, user_fst=None)`: with no `user_fst` it returns `ModelConfig(no_wgd, total_copy_numbers)`.
@@ -726,6 +747,7 @@ print("PASS step 15")
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/ancestors.py`
 * **Edit in NEW:** `medicc/ancestors.py`
 * **Test:** create `tests/migration/test_16_ancestors.py`
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step16_ancestors.py` — **same as REF**.
 
 **Idea.** If `fst` is a `ModelConfig`: turn the tree into `children/leaves/root/normal`, call `reconstruct`. Otherwise master's FSA code. Add `n_cores`.
 **Test:** `tests/migration/test_16_ancestors.py`:
@@ -753,6 +775,7 @@ print("PASS step 16")
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/core.py`
 * **Edit in NEW:** `medicc/core.py`
 * **Test:** create `tests/migration/test_17_core.py`; copy `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/test_data/meso5.tsv` and `meso5.new` into `medicc/test_data/`
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step17_core.py` — REF's engine path; events off until Phase 6, no NNI / FastME (Phase 7).
 
 **Idea.** In `main`: if the model is a `ModelConfig`, use strings (`create_cn_str_dict`), engine distances, engine reconstruction, engine branch lengths (`update_branch_lengths` with directed engine scores), and turn strings back into a table (`create_df_from_cn_str_dict`). Reject `prune_weight > 0` (`_check_fstengine_options`). Keep the six return values. Keep master's FSA path for a custom FST.
 **Events are off until Phase 6:** `reconstruct_events=True` raises `MEDICCError` (engine: "not available yet"; custom FST: never, it has no event labels). Master's event code needs the old `read_fst(n_wgd=..., wgd_x2=...)`, which Step 15 removed; Step 34 brings events back.
@@ -781,6 +804,7 @@ print("PASS step 17")
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/__init__.py`
 * **Edit in NEW:** `medicc/__init__.py`
 * **Test:** a one-line check, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step18_init.py` — one line (`import medicc.fstengine`); REF's `import medicc.nni` is Phase 7.
 
 One line. **Test:** `python -c "import medicc; medicc.fstengine.ModelConfig()"`.
 
@@ -791,6 +815,7 @@ One line. **Test:** `python -c "import medicc; medicc.fstengine.ModelConfig()"`.
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc2`
 * **Edit in NEW:** `medicc2`
 * **Test:** two CLI runs, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step19_medicc2` — REF's CLI changes minus events / NNI / FastME options.
 
 **Idea.** By default call `read_fst(no_wgd=..., total_copy_numbers=...)`. `--fst PATH` = custom fstlib model.
 `--prune-weight > 0` and `--events` with the engine fail early with a clear message (events: "not available yet", until Step 34). `--wgd-x2` only logs that it has no effect. Pass `normal_name` to `write_branch_lengths`. Keep all other options.
@@ -810,6 +835,7 @@ Both run. The second one must give master's old numbers.
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/test_fsts.py`
 * **Edit in NEW:** `medicc/test_fsts.py`
 * **Test:** pytest, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step20_test_fsts.py` — **same as REF**.
 
 **Problem.** These tests check master's old model numbers. They now get the engine by default.
 **Idea.** Load the old model **explicitly** (`read_fst(user_fst=".../wgd_asymm.fst")`). **Never** change an expected number here.
@@ -822,6 +848,7 @@ Both run. The second one must give master's old numbers.
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/test_medicc.py`
 * **Edit in NEW:** `medicc/test_medicc.py`
 * **Test:** pytest, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step21_test_medicc.py` — REF's changes minus the Phase 6/7 tests (events numbers, `fastme` markers).
 
 **Problem.** Some integration tests check old default outputs.
 **Idea.** In Phase 4 only one change: `test_medicc_distance_speed_up` calls `calc_MED_distance`, which needs an fstlib FST, so it loads `medicc/objects/wgd_asymm.fst` explicitly (`read_fst(user_fst=...)`).
@@ -857,6 +884,7 @@ Building that small graph cost more time than it saved. Codex removed it in `a0f
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/tools/benchmark_native.py` (closest match; REF's benchmark)
 * **Create in NEW:** `tests/migration/bench.py`
 * **Test:** run it, see below
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step22_bench.py` — new (REF's `tools/benchmark_native.py` is a PGO benchmark of the finished engine). Default input: meso5 cut to 4 chromosomes, because the Phase 4 engine needs minutes for one full pair; then `--chromosomes 0`, and after Step 26 also `--input examples/gundem_et_al_2015/PTX010_input_df.tsv`. Distances and tree length must stay the same; ancestral profiles may switch to another optimal tie (a note, not an error).
 
 **Problem.** You cannot say "faster" without a number.
 **Idea.** Time three things on a real example with 1 core: the full pairwise distance matrix, one fixed-tree reconstruction (`meso5`), and the slowest single pair you find. Print the times.
@@ -876,6 +904,11 @@ Save the results of the first run (distances, tree length) and check that later 
   * `medicc/fstengine/src/fst_operations.hpp`
   * `medicc/fstengine/src/scoring.hpp`
 * **Test:** `test_11` + bench; create `tests/migration/test_23_split.cpp`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step23_fst_operations.hpp` — final (= REF).
+  * `step23_messages.hpp` — split + blockwise join / resolve, no bounds.
+  * `step23_scoring.hpp` — split at X + drop repeated columns, no cache or bounds.
+  * `step23_test_split.cpp` — test
 
 **Problem.** A long profile gives one huge search. But `A` and `AD` restart at each `X`.
 **Idea.** For a **fixed** WGD choice, costs add over chromosomes. So search each chromosome alone and add.
@@ -908,6 +941,14 @@ Also test empty chromosomes: `"1XX2"`.
   * `medicc/fstengine/src/types.hpp`
   * `medicc/fstengine/src/fstengine.cpp` (`#include "bounds.hpp"`)
 * **Test:** `test_11` + bench; create `tests/migration/test_24_cache.cpp`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step24_types.hpp`
+  * `step24_bounds.hpp` — `score_key` + `cache_score` without a size limit.
+  * `step24_scoring.hpp`
+  * `step24_fstengine.cpp` — + `fstengine_clear`.
+  * `step24_model.py` — + `clear()`.
+  * `step24_scheduler.py` — `model.clear()` after each row.
+  * `step24_test_cache.cpp` — test
 
 **Problem.** The same chromosome pairs come back again and again in a distance matrix.
 **Idea.** A cache in `Model`: key = `(x, y, k, j, directed)` → cost (`score_key`, `cached_score`). `fstengine_clear` empties it.
@@ -926,6 +967,9 @@ For now the cache has no size limit, and the scheduler clears it after each row.
   * `tools/generate_chromosome_bound.py`
   * `medicc/fstengine/src/chromosome_constants.hpp` (the second one is written by the first)
 * **Test:** run twice + `cmp`, see below
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step25_generate_chromosome_bound.py` — **same as REF** (output path only).
+  * `step25_chromosome_constants.hpp` — **byte-identical to REF** (generated; you make it with the script).
 
 **Problem.** For bounds you need the cheapest possible cost between two neighbouring columns, for each WGD pair `(k_left, k_right)` (9 pairs).
 **Idea.** Compute it once in Python (min-plus over the copy-number transitions). Write it as C++ constants into `medicc/fstengine/src/chromosome_constants.hpp`. The WGD charge is **not** in the table.
@@ -938,6 +982,11 @@ For now the cache has no size limit, and the scheduler clears it after each row.
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/bounds.hpp`
 * **Edit in NEW:** `medicc/fstengine/src/bounds.hpp`
 * **Test:** `test_11` + bench; create `tests/migration/test_26_bounds.cpp`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step26_bounds.hpp` — REF minus the cache size limit.
+  * `step26_messages.hpp` — `join` / `resolve` **same as REF**.
+  * `step26_scoring.hpp` — REF's `score` with `room = min(best - other, upper)`, no certify.
+  * `step26_test_bounds.cpp` — test
 
 **Problem.** The search does not know early that a WGD choice is hopeless.
 **Idea.**
@@ -978,6 +1027,15 @@ int main() {
   * `medicc/fstengine/src/scoring.hpp`
   * `medicc/fstengine/src/fstengine.cpp` (`#include` the two new headers)
 * **Test:** `test_11` + bench; create `tests/migration/test_27_astar.cpp`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step27_types.hpp`
+  * `step27_astar.hpp` — REF minus `tracked_compose` (Phase 6).
+  * `step27_pair_filter.hpp` — REF with the default matcher / filter (Step 30 changes two lines).
+  * `step27_search.hpp` — your Step 7 file + A*; REF minus `original_ids`.
+  * `step27_messages.hpp` — final (= REF).
+  * `step27_scoring.hpp`
+  * `step27_fstengine.cpp` — + `a_even`.
+  * `step27_test_astar.cpp` — test
 
 **Problem.** For a pair, OpenFST still builds composition states that cannot fit the cap. Dijkstra also looks at states that cannot lead to a cheap answer.
 **Idea.**
@@ -1013,6 +1071,10 @@ This is where the big speed-up came in the real history.
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/shortening.py`
 * **Create in NEW:** `medicc/fstengine/shortening.py`
 * **Test:** create `tests/migration/test_28_shortening.py`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step28_shortening.py` — **same as REF**.
+  * `step28_scheduler.py`
+  * `step28_test_shortening.py` — test
 
 **Problem.** In a pair, many columns are the same as their neighbour in **both** profiles.
 **Idea.** `prepare(profile)` marks where each profile changes (once per sample). `pair(left, right)` keeps only columns where **either** changes, and always keeps `X`. Only for pair distances. Hook: the scheduler uses it.
@@ -1041,6 +1103,9 @@ print("PASS step 28")
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/scoring.hpp`
 * **Edit in NEW:** `medicc/fstengine/src/scoring.hpp`
 * **Test:** `test_11` + bench; create `tests/migration/test_29_certify.cpp`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step29_scoring.hpp` — final (= REF).
+  * `step29_test_certify.cpp` — test
 
 **Problem.** Often the upper bound from Step 26 is already the true answer. The search still works hard to find that same cost again.
 **Idea.** Costs are whole numbers. So ask a smaller question: "Is there a path that is **strictly cheaper**?"
@@ -1059,6 +1124,7 @@ print("PASS step 28")
 * **Read in REF:** `../medicc-full-fst-lloh-wgd2-capped-x2/medicc/native/src/pair_filter.hpp`
 * **Edit in NEW:** `medicc/fstengine/src/pair_filter.hpp`
 * **Test:** `test_11` + bench
+* **Reference:** `../medicc-full-fst-lloh-wgd2-capped-x2/reference/step30_pair_filter.hpp` — final (= REF).
 
 **Problem.** OpenFST's default composition filter tracks epsilon (empty-label) moves. Pair graphs have **no** epsilon arcs: every arc reads one symbol on each side. That tracking is wasted work.
 **Idea.** Base `CostComposeFilter` on `fst::NullComposeFilter<fst::SortedMatcher<Fst>>`, with a matching `GenericComposeStateTable` (`PairMatcher`, `PairFilter`, `PairStateTable`). Only the pair graph changes.
@@ -1079,6 +1145,13 @@ print("PASS step 28")
   * `medicc/fstengine/scheduler.py`
   * `medicc/fstengine/model.py`
 * **Test:** `test_11` + bench; create `tests/migration/test_31_cache.py`
+* **Reference** (in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`):
+  * `step31_types.hpp` — REF minus `loss` / `gain` / `doubling` (Phase 6).
+  * `step31_bounds.hpp` — final (= REF).
+  * `step31_fstengine.cpp` — + `fstengine_finish_row`.
+  * `step31_model.py` — + `_finish_row()`.
+  * `step31_scheduler.py` — final (= REF).
+  * `step31_test_cache.py` — test
 
 **Problem.** Step 24 clears the cache after each matrix row. But the next row asks many of the same chromosome pairs.
 If you keep it forever, memory grows without limit.
@@ -1325,6 +1398,73 @@ for t in tests/migration/test_*.py; do python -B "$t" || break; done
 Then run the same examples in REF and NEW, with a fixed tree and without. Compare distances, branch lengths, tree length and event counts **as numbers**.
 Ties may pick a different ancestor string; that is fine if the cost is the same and the events replay.
 Last: install the package and run `import medicc` and `medicc2 --help` from **outside** the checkout (this finds missing data files).
+
+---
+
+## <a id="references"></a>References: how close each one is to REF
+
+[↑ Contents](#contents)
+
+All files are in `../medicc-full-fst-lloh-wgd2-capped-x2/reference/`. **Code in REF** = the share of the
+reference's code lines that also appear in REF's production file, in order (comments, docstrings,
+`#include`s and whitespace ignored; `native` read as `fstengine`). **REF has more** = REF lines not in the
+reference, mostly later steps (bounds, A*, cache) or later phases (histories, message inspection, NNI).
+
+* **Same as REF:** the code is REF's (comments, `#include`s, names and line wrapping may differ).
+* **Part of REF:** REF's code with later steps left out, plus small changes (your names, your error texts).
+* **Own version:** written for the plan; REF has no such intermediate file.
+
+| Step | Reference | Code in REF | REF has more | Verdict |
+|---|---|---|---|---|
+| 7 | `step07_search.hpp` | 94% | 35 | part of REF (no A*) |
+| 8 | `step08_messages.hpp` | 49% | 99 | own version: simplest `join` / `resolve` |
+| 9 | `step09_scoring.hpp` | 60% | 105 | own version: simplest `score` |
+| 10 | `step10_fstengine.cpp` | 58% | 132 | own version: your `load_model`; REF adds histories, message inspection |
+| 11 | `step11_model.py` | 93% | 29 | part of REF |
+| 12, 13 | `step12_setup.py`, `step13_setup.py` | 38% | 78 | own version: master's `setup.py` (REF has the PGO build) |
+| 14 | `step14_scheduler.py` | 99% | 4 | part of REF (no shortening, no `_finish_row`) |
+| 14 | `step14_init.py` | 100% | 0 | **same as REF** |
+| 15 | `step15_io.py` | 97% | 8 | part of REF |
+| 16 | `step16_ancestors.py` | 100% | 0 | **same as REF** |
+| 17 | `step17_core.py` | 92% | 113 | part of REF (events off, no NNI / FastME) |
+| 18 | `step18_init.py` | 95% | 2 | part of REF (no `medicc.nni`) |
+| 19 | `step19_medicc2` | 94% | 43 | part of REF (no events / NNI / FastME options) |
+| 20 | `step20_test_fsts.py` | 100% | 0 | **same as REF** |
+| 21 | `step21_test_medicc.py` | 99% | 14 | part of REF (no Phase 6/7 tests) |
+| 22 | `step22_bench.py` | 22% | 99 | own version: REF's benchmark is for PGO builds |
+| 23 | `step23_fst_operations.hpp` | 99% | 1 | **same as REF** (final) |
+| 23 | `step23_messages.hpp` | 80% | 32 | own version: blockwise `join`, no bounds |
+| 23 | `step23_scoring.hpp` | 77% | 87 | own version: split, no cache / bounds |
+| 24 | `step24_types.hpp` | 94% | 4 | part of REF |
+| 24 | `step24_bounds.hpp` | 91% | 183 | part of REF (2 functions; `cache_score` without size limit) |
+| 24 | `step24_scoring.hpp` | 82% | 78 | own version: cache, no bounds |
+| 24 | `step24_fstengine.cpp` | 57% | 131 | own version (as Step 10) |
+| 24 | `step24_model.py`, `step24_scheduler.py` | 94%, 98% | 25, 4 | part of REF |
+| 25 | `step25_generate_chromosome_bound.py` | 100% | 0 | **same as REF** (output path only) |
+| 25 | `step25_chromosome_constants.hpp` | 100% | 0 | **byte-identical to REF** |
+| 26 | `step26_bounds.hpp` | 100% | 11 | part of REF (no cache size limit) |
+| 26 | `step26_messages.hpp` | 91% | 0 | `join` / `resolve` **same as REF**; `make_graph` still here |
+| 26 | `step26_scoring.hpp` | 96% | 43 | part of REF (no certify, no A*) |
+| 27 | `step27_types.hpp` | 90% | 2 | part of REF (no `score_key_bytes`) |
+| 27 | `step27_astar.hpp` | 96% | 12 | part of REF (no `tracked_compose`) |
+| 27 | `step27_pair_filter.hpp` | 99% | 2 | REF except the 2 lines of Step 30 |
+| 27 | `step27_search.hpp` | 97% | 11 | part of REF (no `original_ids`) |
+| 27 | `step27_messages.hpp` | 100% | 0 | **same as REF** (final) |
+| 27 | `step27_scoring.hpp` | 96% | 37 | part of REF (no greedy / certify) |
+| 27 | `step27_fstengine.cpp` | 51% | 131 | own version (as Step 10) |
+| 28 | `step28_shortening.py` | 100% | 0 | **same as REF** |
+| 28 | `step28_scheduler.py` | 99% | 1 | REF except `clear()` instead of `_finish_row()` |
+| 29 | `step29_scoring.hpp` | 99% | 2 | **same as REF** (final) |
+| 30 | `step30_pair_filter.hpp` | 100% | 0 | **same as REF** (final) |
+| 31 | `step31_types.hpp` | 91% | 1 | part of REF (no `loss` / `gain` / `doubling`, Phase 6) |
+| 31 | `step31_bounds.hpp` | 100% | 0 | **same as REF** (final) |
+| 31 | `step31_fstengine.cpp` | 49% | 131 | own version (as Step 10; REF adds histories, message inspection) |
+| 31 | `step31_model.py` | 94% | 21 | part of REF (no `history`, no `am_*`) |
+| 31 | `step31_scheduler.py` | 100% | 0 | **same as REF** (final) |
+
+After Step 31 every engine header except `types.hpp` and `fstengine.cpp` is REF's code; those two differ
+only by the Phase 6 parts and your own `load_model`. Answers and speed equal REF's
+(full meso5 and all 10 gundem patients, checked).
 
 ---
 
