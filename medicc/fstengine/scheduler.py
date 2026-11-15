@@ -54,6 +54,7 @@ def pairwise_distances(cn_str_dict, config, n_cores=1):
     def score_row(i):
         model = models.get()
         row = [model.score(cn_str_dict[samples[i]], cn_str_dict[samples[j]]) for j in range(i + 1, n)]
+        model.clear()
         return i, row
 
     try:

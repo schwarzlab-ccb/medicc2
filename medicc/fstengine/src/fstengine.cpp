@@ -15,6 +15,7 @@
 #include "search.hpp"
 #include "messages.hpp"
 #include "scoring.hpp"
+#include "bounds.hpp"
 
 // Read the model parts file. Blocks: "NAME n start narcs", one line of n final
 // weights (INF = not final), then narcs lines "source ilabel olabel weight target".
@@ -130,5 +131,10 @@ double fstengine_score(void *m, const char *x, const char *y, int directed) {
         error = e.what();
         return -1;
     }
+}
+
+// Release the score cache of this handle (the scheduler calls it after each matrix row).
+void fstengine_clear(void *m) {
+    static_cast<Model *>(m)->chromosome_scores.clear();
 }
 }

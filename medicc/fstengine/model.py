@@ -59,6 +59,7 @@ def library():
         'fstengine_join': (p, [p, p, p]),
         'fstengine_resolve': (s, [p, s, p, ctypes.POINTER(d)]),
         'fstengine_score': (d, [p, s, s, i]),
+        'fstengine_clear': (None, [p]),
     }
     for name, (result, arguments) in signatures.items():
         function = getattr(lib, name)
@@ -162,6 +163,11 @@ class Model:
         if value < 0:
             raise RuntimeError(self.lib.am_error().decode())
         return value
+
+    def clear(self):
+        """Forget the cached chromosome scores of this handle (answers stay the same)"""
+        self.check_open()
+        self.lib.fstengine_clear(self.handle)
 
     def close(self):
         if getattr(self, 'handle', None):

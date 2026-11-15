@@ -9,6 +9,7 @@
 #include "fst_operations.hpp"
 #include "search.hpp"
 #include "messages.hpp"
+#include "bounds.hpp"
 
 // Scalar scores: score() is join()/resolve() on two single profiles, keeping only the cost.
 //   directed = true : T(x, y), x is the parent (one edge, j WGDs; k is not used).
@@ -17,9 +18,19 @@
 
 // One WGD choice: the cheapest path for exactly k (left) and j (right) WGDs, without the WGD charge.
 static double fixed(Model &m, const std::string &x, const std::string &y, int k, int j, bool directed, double cap) {
+    // K is symmetric: always search in the order the cache key uses.
+    if (!directed && (x > y || (x == y && k > j)))
+        return fixed(m, y, x, j, k, false, cap);
+    const std::string key = score_key(x, y, k, j, directed);
+    const auto known = m.chromosome_scores.find(key);
+    if (known != m.chromosome_scores.end())
+        return known->second;
     Message a{linear(x), 0, int(x.size())}, b{linear(y), 0, int(y.size())};
     auto graph = make_graph(m, a, b, k, j, directed);
-    return search(*graph, cap, false).cost;
+    double value = search(*graph, cap, false).cost;
+    if (std::isfinite(value))
+        cache_score(m, key, value);
+    return value; 
 }
 
 // The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).

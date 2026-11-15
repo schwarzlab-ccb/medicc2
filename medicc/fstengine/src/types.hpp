@@ -31,12 +31,7 @@ struct Message {
 struct Model {
     Vec a, ad;
     int max_wgds = 2;
+    // Exact chromosome scores. key = score_key(x, y, k, j, directed) (bounds.hpp). Only finished
+    // searches are stored; a search stopped by its cap proves nothing. Cleared by fstengine_clear.
+    std::unordered_map<std::string, double> chromosome_scores;
 };
-// struct SuffixData;
-// struct Model {
-//     Vec a, ad, a_even, loss, gain, doubling;
-//     int max_wgds = 2;
-//     std::unordered_map<std::string, std::shared_ptr<const SuffixData>> suffix_cache;
-//     std::unordered_map<std::string, double> chromosome_scores;
-//     size_t sore_key_bytes = 0;
-// };
