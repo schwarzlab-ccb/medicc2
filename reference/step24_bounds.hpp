@@ -2,7 +2,7 @@
 // REFERENCE for migration Step 24 (not part of REF's code). Goes to medicc/fstengine/src/bounds.hpp (new).
 // The first two functions of REF's bounds.hpp: the key of the score cache and a store without a
 // size limit. Left out until later steps:
-//   cached_score, changes / doubled / witness, string_lower, language_lower, ChromosomeBounds,
+//   cached_score, upper_bound_no_wgd / doubled / upper_bound_with_wgd, lower_bound_with_wgd, lower_bound_message, ChromosomeBounds,
 //   message_bounds, branch_order, #include "chromosome_constants.hpp"  (Step 26)
 //   the size limit of cache_score (65536 entries, 8 MiB of keys, score_key_bytes)  (Step 31)
 //

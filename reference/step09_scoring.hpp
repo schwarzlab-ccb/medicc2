@@ -4,7 +4,7 @@
 // Left out until later steps:
 //   splitting at X + shortening repeated columns  (Step 23)
 //   score cache: score_key / cached_score / cache_score, the x > y swap  (Step 24)
-//   bounds and branch order: BlockBounds, string_lower, witness, branch_order, room  (Steps 24/26/29)
+//   bounds and branch order: BlockBounds, lower_bound_with_wgd, upper_bound_with_wgd, branch_order, room  (Steps 24/26/29)
 //   pair filter + A*: make_pair_graph, greedy_pair, heuristic, budget  (Step 27)
 //
 // Scalar scores. score() is join()/resolve() on two single profiles, but it keeps only the

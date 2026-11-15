@@ -4,7 +4,7 @@
 // Your Step 9 file; score() now splits the strings at X and adds chromosome scores.
 // Left out until later steps:
 //   score cache: score_key / cached_score / cache_score, the x > y swap in fixed()  (Step 24)
-//   bounds and branch order: ChromosomeBounds, string_lower, witness, branch_order  (Step 26)
+//   bounds and branch order: ChromosomeBounds, lower_bound_with_wgd, upper_bound_with_wgd, branch_order  (Step 26)
 //   pair filter + A*: make_pair_graph  (Step 27);  greedy_pair, room = ... - 1  (Step 29)
 
 #include <algorithm>

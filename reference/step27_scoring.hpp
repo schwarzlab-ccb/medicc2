@@ -78,7 +78,7 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     std::stable_sort(chromosomes.begin(), chromosomes.end(),
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
     // Per chromosome and WGD choice (branch = 3k + j): a lower bound and the cost of one real
-    // history (witness). Both equal: the exact score, cached without a search.
+    // history (upper_bound_with_wgd). Both equal: the exact score, cached without a search.
     std::vector<ChromosomeBounds> bounds(chromosomes.size());
     for (size_t i = 0; i < chromosomes.size(); ++i) {
         bounds[i].upper.fill(infinity);
@@ -91,17 +91,16 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
                     bounds[i].lower[branch] = bounds[i].upper[branch] = known;
                     continue;
                 }
-                double lower = directed ? 0 : string_lower(a, b, branch),
-                       upper = witness(a, b, k, j, directed);
+                double lower = directed ? 0 : lower_bound_with_wgd(a, b, branch),
+                       upper = upper_bound_with_wgd(a, b, k, j, directed);
                 bounds[i].lower[branch] = lower;
                 bounds[i].upper[branch] = upper;
                 if (lower == upper)
                     cache_score(m, score_key(a, b, k, j, directed), lower);
             }
     }
-    // best starts at the cheapest witness; branches from the lowest lower bound.
-    double best = infinity;
-    auto branches = branch_order(m, bounds, directed, best);
+    // best starts at the cheapest upper bound; branches from the lowest lower bound.
+    auto [branches, best] = branch_order(m, bounds, directed);
     for (auto [lower, branch] : branches) {
         if (lower >= best) // a scalar needs a strictly better branch
             continue;
@@ -113,7 +112,7 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
                 break;
             // other = the rest of this branch: chromosomes done + lower bounds of those to come.
             double before = bounds[i].lower[branch], other = bound - before;
-            // This chromosome may use at most best - other. Its witness costs upper, so a
+            // This chromosome may use at most best - other. Its upper bound is upper, so a
             // search with cap upper always finds the exact score.
             double room = std::min(best - other, bounds[i].upper[branch]);
             double value = fixed(m, chromosomes[i].first, chromosomes[i].second, k, j, directed, room);

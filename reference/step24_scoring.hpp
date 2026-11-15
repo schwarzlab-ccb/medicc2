@@ -3,7 +3,7 @@
 // Markers: ">>> Step 24" new or changed code, ending at "<<< Step 24" (one-line changes have no end); "--- Step 24" code to remove.
 // Step 23's file; only fixed() changes: the x > y swap and the score cache (bounds.hpp).
 // Left out until later steps:
-//   bounds and branch order: ChromosomeBounds, string_lower, witness, branch_order, cached_score  (Step 26)
+//   bounds and branch order: ChromosomeBounds, lower_bound_with_wgd, upper_bound_with_wgd, branch_order, cached_score  (Step 26)
 //   pair filter + A*: make_pair_graph  (Step 27);  greedy_pair, room = ... - 1  (Step 29)
 
 #include <algorithm>

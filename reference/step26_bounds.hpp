@@ -5,7 +5,7 @@
 // score_key_bytes); cache_score stays your Step 24 version. Comments added; code otherwise SAME as REF.
 
 // Lower and upper bounds that order and prune the exact searches. Upper bounds
-// are concrete feasible histories (witness); lower bounds relax the capped
+// are concrete feasible histories (upper_bound_with_wgd); lower bounds relax the capped
 // L_LOH model at segment boundaries (tables in chromosome_constants.hpp, made
 // by tools/generate_chromosome_bound.py). Branches are the 3x3 combinations of
 // WGD counts on the two sides of a join or pair score.
@@ -43,15 +43,35 @@ static void cache_score(Model &m, std::string key, double value) {
 }
 
 // The cached exact score, or -1 if there is none.
-// >>> Step 26: add 172 lines
+// >>> Step 26: add 214 lines
 static double cached_score(Model &m, const std::string &x, const std::string &y, int k, int j,
                            bool directed) {
     auto found = m.chromosome_scores.find(score_key(x, y, k, j, directed));
     return found == m.chromosome_scores.end() ? -1 : found->second;
 }
-// A concrete feasible history: identity A stages, mandatory capped doublings,
-// then unit interval losses/gains in the last A. No zero-to-positive gain.
-static double changes(const std::string &source, const std::string &target) {
+// Upper bound for ONE A stage when there is NO WGD (A = L_LOH o G: losses, then gains).
+// It is the cost of one concrete history in which every column only loses or only gains.
+// Losses and gains are counted apart: pl / pg = the loss / gain depth of the previous column.
+// Pay 1 for every NEW event (a column deeper than the one before it); ending events is free.
+// X ends all events. Infinity: different lengths, X in only one string, or 0 -> positive.
+// Example (gains above the line, losses below; one # = one event over that column):
+//
+//   column    1    2    3    4    X    6    7    8
+//   source    3    3    2    1    X    1    2    2
+//   target    1    2    2    3    X    2    4    3
+//
+//   gain +2                  #    |         #
+//   gain +1                  #    |    #    #    #
+//          -----------------------+---------------
+//   loss -1   #    #              |
+//   loss -2   #                   |
+//
+//   new       2    0    0    2    |    1    1    0    total 6
+//
+// Not exact: a running loss cannot carry over a 0 -> 0 column, so 202 -> 000 gives 4
+// (the model needs 2: two losses over all three columns, the middle 0 stays 0).
+// upper_bound_with_wgd() adds the WGDs (doubled) and the ancestors around this function.
+static double upper_bound_no_wgd(const std::string &source, const std::string &target) {
     if (source.size() != target.size())
         return infinity;
     int pl = 0, pg = 0, total = 0;
@@ -78,9 +98,19 @@ static std::string doubled(std::string word, int k) {
             c = '0' + std::min(8, (c - '0') * (1 << k));
     return word;
 }
-static double witness(const std::string &x, const std::string &y, int k, int j, bool directed) {
+// The smallest copy number that is >= cn after k doublings: cn / 2^k, rounded up.
+// Example: cn = 5, k = 1 -> 3 (3 doubled is 6 >= 5; 2 doubled is only 4).
+static int smallest_before_doublings(int cn, int k) {
+    int factor = 1; // 2^k
+    for (int i = 0; i < k; ++i)
+        factor *= 2;
+    return (cn + factor - 1) / factor; // integer division, rounded up
+}
+// The upper bound WITH WGDs: a concrete feasible history with identity A stages, the
+// mandatory capped doublings, then upper_bound_no_wgd in the last A. No zero-to-positive gain.
+static double upper_bound_with_wgd(const std::string &x, const std::string &y, int k, int j, bool directed) {
     if (directed)
-        return changes(doubled(x, j), y);
+        return upper_bound_no_wgd(doubled(x, j), y);
     if (x.size() != y.size())
         return infinity;
     double best = infinity;
@@ -91,15 +121,19 @@ static double witness(const std::string &x, const std::string &y, int k, int j, 
                 return infinity;
             ancestor[i] = x[i] == 'X' ? 'X' : char('0' + c);
         }
-        best = std::min(best, changes(doubled(ancestor, k), x) + changes(doubled(ancestor, j), y));
+        best = std::min(best, upper_bound_no_wgd(doubled(ancestor, k), x) + upper_bound_no_wgd(doubled(ancestor, j), y));
     }
+    // One more guess, not flat: in each column, the smallest ancestor copy number that is still
+    // >= x after k doublings and >= y after j doublings. Then neither branch needs a gain.
     for (size_t i = 0; i < x.size(); ++i)
-        if (x[i] != 'X')
-            ancestor[i] = '0' + std::max(((x[i] - '0') + (1 << k) - 1) / (1 << k),
-                                         ((y[i] - '0') + (1 << j) - 1) / (1 << j));
-    return std::min(best, changes(doubled(ancestor, k), x) + changes(doubled(ancestor, j), y));
+        if (x[i] != 'X') {
+            int need_x = smallest_before_doublings(x[i] - '0', k);
+            int need_y = smallest_before_doublings(y[i] - '0', j);
+            ancestor[i] = char('0' + std::max(need_x, need_y));
+        }
+    return std::min(best, upper_bound_no_wgd(doubled(ancestor, k), x) + upper_bound_no_wgd(doubled(ancestor, j), y));
 }
-static double string_lower(const std::string &x, const std::string &y, int branch) {
+static double lower_bound_with_wgd(const std::string &x, const std::string &y, int branch) {
     // A single path through the boundary relaxation; no graph search needed.
     if (x.empty())
         return 0;
@@ -123,23 +157,28 @@ static std::vector<int> column_masks(const Message &message) {
                 masks[d] |= 1 << (it.Value().ilabel - 1);
     return masks;
 }
-static double language_lower(const std::vector<int> &left,
-                             const std::vector<int> &right, int branch) {
+// The bits of a column mask (column_masks): bit c = copy number c can be here.
+constexpr int X_BIT = 1 << 9;      // bit 9: the column can be X
+constexpr int CN_BITS = X_BIT - 1; // bits 0..8: the column can be copy number 0..8
+static double lower_bound_message(const std::vector<int> &left,
+                                  const std::vector<int> &right, int branch) {
+    // left:  column masks of the left message (bit c = copy number c can be there; X_BIT = X)
+    // right: column masks of the right message, same form
     // Drop child correlations and nonnegative weights ONLY for this lower bound.
     // Native VectorFst and ShortestDistance replace the production handwritten DP.
     for (size_t i = 0; i < left.size(); ++i) {
-        bool lx = left[i] & 512, rx = right[i] & 512;
-        if (lx != rx || (lx && ((left[i] & 511) || (right[i] & 511))))
+        bool lx = left[i] & X_BIT, rx = right[i] & X_BIT;
+        if (lx != rx || (lx && ((left[i] & CN_BITS) || (right[i] & CN_BITS))))
             return 0;
     }
     double total = 0;
     for (size_t first = 0; first < left.size();) {
-        if (left[first] == 512) {
+        if (left[first] == X_BIT) {
             ++first;
             continue;
         }
         size_t end = first;
-        while (end < left.size() && left[end] != 512)
+        while (end < left.size() && left[end] != X_BIT)
             ++end;
         Vec graph;
         graph.SetStart(graph.AddState());
@@ -191,16 +230,19 @@ message_bounds(Model &model, const std::vector<std::pair<Message, Message>> &par
             for (int j = 0; j <= model.max_wgds; ++j) {
                 int branch = 3 * k + j;
                 bounds.lower[branch] =
-                    (directed ? 0 : language_lower(lm, rm, branch)) + l.second + r.second;
+                    (directed ? 0 : lower_bound_message(lm, rm, branch)) + l.second + r.second;
                 bounds.upper[branch] =
-                    witness(l.first, r.first, k, j, directed) + l.second + r.second;
+                    upper_bound_with_wgd(l.first, r.first, k, j, directed) + l.second + r.second;
             }
     }
     return out;
 }
-static std::vector<std::pair<double, int>>
-branch_order(Model &model, const std::vector<ChromosomeBounds> &chromosomes, bool directed, double &best) {
+// Returns the WGD choices sorted from the lowest lower bound, and the cheapest upper
+// bound: the best cost the caller starts with.
+static std::pair<std::vector<std::pair<double, int>>, double>
+branch_order(Model &model, const std::vector<ChromosomeBounds> &chromosomes, bool directed) {
     std::vector<std::pair<double, int>> order;
+    double best = infinity;
     for (int k = 0; k <= (directed ? 0 : model.max_wgds); ++k)
         for (int j = 0; j <= model.max_wgds; ++j) {
             int branch = 3 * k + j;
@@ -219,6 +261,6 @@ branch_order(Model &model, const std::vector<ChromosomeBounds> &chromosomes, boo
         int ac = a.second / 3 + a.second % 3, bc = b.second / 3 + b.second % 3;
         return ac == bc ? a.second < b.second : ac < bc;
     });
-    return order;
+    return {order, best};
 }
 // <<< Step 26

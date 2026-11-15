@@ -127,7 +127,7 @@ static std::string history(Model &m, const std::string &x, const std::string &y)
         for (size_t i = 0; i < stages.size(); ++i) {
             if (stages[i] == &m.a) {
                 auto local = trace_stages(trace.words[i], trace.words[i + 1], {&m.loss, &m.gain},
-                                          changes(trace.words[i], trace.words[i + 1]));
+                                          upper_bound_no_wgd(trace.words[i], trace.words[i + 1]));
                 words.push_back(local.words[1]);
                 words.push_back(local.words[2]);
             } else

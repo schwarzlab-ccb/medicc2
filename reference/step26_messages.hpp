@@ -114,10 +114,10 @@ static Message join(Model &m, const Message &l, const Message &r) {
     std::iota(order.begin(), order.end(), 0);
     std::stable_sort(order.begin(), order.end(),
                      [&](int a, int b) { return parts[a].first.length < parts[b].first.length; });
-    double best = infinity;
+    // --- Step 26: remove 1 line here, starting: double best = infinity;
     Vec combined;
     // >>> Step 26: change 6 lines (was 3)
-    auto branches = branch_order(m, bounds, false, best);
+    auto [branches, best] = branch_order(m, bounds, false);
     for (auto [lower, branch] : branches) {
         if (lower > best)
             continue; // Equality must retain all optimal words.
@@ -174,10 +174,10 @@ static std::pair<std::string, double> resolve(Model &m, const std::string &paren
     // >>> Step 26: add 1 line
     auto bounds = message_bounds(m, parts, true);
     std::string bestword;
-    double best = infinity;
+    // --- Step 26: remove 1 line here, starting: double best = infinity;
     bool found = false;
     // >>> Step 26: change 5 lines (was 2)
-    auto branches = branch_order(m, bounds, true, best);
+    auto [branches, best] = branch_order(m, bounds, true);
     for (auto [lower, branch] : branches) {
         if (lower > best || (found && lower == best))
             continue;

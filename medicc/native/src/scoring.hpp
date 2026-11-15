@@ -88,16 +88,15 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
                     bounds[i].lower[branch] = bounds[i].upper[branch] = known;
                     continue;
                 }
-                double lower = directed ? 0 : string_lower(a, b, branch),
-                       upper = witness(a, b, k, j, directed);
+                double lower = directed ? 0 : lower_bound_with_wgd(a, b, branch),
+                       upper = upper_bound_with_wgd(a, b, k, j, directed);
                 bounds[i].lower[branch] = lower;
                 bounds[i].upper[branch] = upper;
                 if (lower == upper)
                     cache_score(m, score_key(a, b, k, j, directed), lower);
             }
     }
-    double best = infinity;
-    auto branches = branch_order(m, bounds, directed, best);
+    auto [branches, best] = branch_order(m, bounds, directed);
     for (auto [lower, branch] : branches) {
         if (lower >= best)
             continue;
