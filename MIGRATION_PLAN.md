@@ -1019,7 +1019,7 @@ For now the cache has no size limit, and the scheduler clears it after each row.
   * `step26_test_bounds.cpp` — test
 * **Order** (follow the `>>> Step 26` markers):
   1. `bounds.hpp`: the `#include`s (with `chromosome_constants.hpp` from Step 25), then the one big block:
-     `cached_score`, `changes` / `doubled` / `witness`, `string_lower` / `language_lower`, `ChromosomeBounds`,
+     `cached_score`, `upper_bound_no_wgd` / `doubled` / `upper_bound_with_wgd`, `lower_bound_with_wgd` / `lower_bound_message`, `ChromosomeBounds`,
      `message_bounds`, `branch_order`. It builds now; nothing uses it yet.
   2. `messages.hpp`: `#include "bounds.hpp"`; `join()` and `resolve()` use the bounds.
   3. `scoring.hpp`: `score()` computes the bounds per piece and tries WGD choices in `branch_order`.
@@ -1028,8 +1028,8 @@ For now the cache has no size limit, and the scheduler clears it after each row.
 
 **Problem.** The search does not know early that a WGD choice is hopeless.
 **Idea.**
-* Upper bound: build **one** valid history by hand (`changes`, `doubled`, `witness`). Its cost is a cap for the search.
-* Lower bound: the boundary table (`string_lower`, `language_lower`).
+* Upper bound: build **one** valid history by hand (`upper_bound_no_wgd`, `doubled`, `upper_bound_with_wgd`). Its cost is a cap for the search.
+* Lower bound: the boundary table (`lower_bound_with_wgd`, `lower_bound_message`).
 * `branch_order`: try WGD choices from the lowest lower bound. Skip a choice whose lower bound is worse than the best found. In a **join**, skip only **strictly** worse choices (keep ties).
 * If lower bound = upper bound, the answer is known. Cache it and do not search.
 
@@ -1038,9 +1038,9 @@ For now the cache has no size limit, and the scheduler clears it after each row.
 ```cpp
 int main() {
     assert(doubled("5X3", 1) == "8X6");
-    assert(changes("22", "11") == 1);
-    assert(changes("2X2", "1X1") == 2);
-    assert(!std::isfinite(changes("0", "1")));
+    assert(upper_bound_no_wgd("22", "11") == 1);
+    assert(upper_bound_no_wgd("2X2", "1X1") == 2);
+    assert(!std::isfinite(upper_bound_no_wgd("0", "1")));
 }
 ```
 

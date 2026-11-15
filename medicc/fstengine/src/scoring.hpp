@@ -30,7 +30,7 @@ static double fixed(Model &m, const std::string &x, const std::string &y, int k,
     double value = search(*graph, cap, false).cost;
     if (std::isfinite(value))
         cache_score(m, key, value);
-    return value; 
+    return value;
 }
 
 // The minimum over all WGD choices of (WGD charge + sum of the chromosome scores).
@@ -55,18 +55,49 @@ static double score(Model &m, const std::string &x, const std::string &y, bool d
     // Shortest first: cheap chromosomes use up the budget early and stop a hopeless (k, j) sooner.
     std::stable_sort(chromosomes.begin(), chromosomes.end(),
                      [](const auto &a, const auto &b) { return a.first.size() < b.first.size(); });
-
-    double best = infinity;
-    for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
-        for (int j = 0; j <= m.max_wgds; ++j) {
-            double total = k + j;
-            for (auto &[a, b]: chromosomes) {
-                // Every chromosome costs >= 0: this one may use at most best - total
-                total += fixed(m, a, b, k, j, directed, best - total);
-                if (!std::isfinite(total))
-                    break;
+    // Per chromosome and WGD choice (branch = 3k + j): a lower bound and the cost of one real history
+    // (upper_bound_with_wgd). Both equal: the exact score, cached without a search
+    std::vector<ChromosomeBounds> bounds(chromosomes.size());
+    for (size_t i = 0; i < chromosomes.size(); ++i) {
+        bounds[i].upper.fill(infinity);
+        auto &[a, b] = chromosomes[i];
+        for (int k = 0; k <= (directed ? 0 : m.max_wgds); ++k)
+            for (int j = 0; j <= m.max_wgds; ++j) {
+                int branch = 3 * k + j;
+                double known = cached_score(m, a, b, k, j, directed);
+                if (known >= 0) {
+                    bounds[i].lower[branch] = bounds[i].upper[branch] = known;
+                    continue;
+                }
+                double lower = directed ? 0 : lower_bound_with_wgd(a, b, branch),
+                       upper = upper_bound_with_wgd(a, b, k, j, directed);
+                bounds[i].lower[branch] = lower;
+                bounds[i].upper[branch] = upper;
+                if (lower == upper)
+                    cache_score(m, score_key(a, b, k, j, directed), lower);
             }
-            best = std::min(best, total);
+    }
+
+    auto [branches, best] = branch_order(m, bounds, directed);
+    for (auto [lower, branch] : branches) {
+        if (lower >= best) // a scaler needs a strictly better branch
+            continue;
+        // bound: a lower bound of this branch that becomes exact chromosome by chromosome
+        double bound = lower;
+        int k = branch / 3, j = branch % 3;
+        for (size_t i = 0; i < chromosomes.size(); ++i) {
+            if (bound >= best)
+                break;
+            double before = bounds[i].lower[branch], other = bound - before;
+            double room = std::min(best - other, bounds[i].upper[branch]);
+            double value = fixed(m, chromosomes[i].first, chromosomes[i].second, k, j, directed, room);
+            if (!std::isfinite(value)) {
+                bound = infinity;
+                break;
+            }
+            bound += value - before;
         }
+        best = std::min(best, bound);
+    }
     return best;
 }

@@ -26,6 +26,7 @@
 #include "types.hpp"
 #include "fst_operations.hpp"
 #include "search.hpp"
+#include "bounds.hpp"
 
 // Every parent that can reach a word of 'child' with exactly k WGDs:
 // A o child, then AD o ... k times. Lazy. With `project`, keep only the parent side.
@@ -98,6 +99,7 @@ static std::vector<std::pair<Message, Message>> split(const Message &l, const Me
 // Tries every WGD count pair (k, j); each WGD costs 1, charged once per genome
 static Message join(Model &m, const Message &l, const Message &r) {
     auto parts = split(l, r);
+    auto bounds = message_bounds(m, parts, false);
     // Shortest chromosomes first: a short chromosome is searched faster. If the short ones
     // already use up the budget, that (k, j) is dropped without searching the long ones.
     std::vector<int> order(parts.size());
@@ -105,40 +107,48 @@ static Message join(Model &m, const Message &l, const Message &r) {
     std::stable_sort(order.begin(), order.end(),
                      [&](int a, int b) { return parts[a].first.length < parts[b].first.length; });
 
-    double best = infinity;
     Vec combined; // union of the languages of every (k, j) that ties the best cost
-    for (int k = 0; k <= m.max_wgds; ++k)
-        for (int j = 0; j <= m.max_wgds; ++j) {
-            double total = k + j;
-            std::vector<Vec> chromosomes(parts.size());
-            bool feasible = true;
-            for (int i : order) {
-                // Every chromosome costs >= 0, so this one may use at most best - total
-                // search() keeps states equal to the cap, so ties survive
-                auto graph = make_graph(m, parts[i].first, parts[i].second, k, j, false);
-                auto result = search(*graph, best - total, true);
-                if (!std::isfinite(result.cost)) {
-                    feasible = false;
-                    break;
-                }
-                total += result.cost;
-                chromosomes[i] = canonical(std::move(result.tight));
+    auto [branches, best] = branch_order(m, bounds, false);
+    for (auto [lower, branch]: branches) {
+        if (lower > best)
+            continue;
+        int k = branch / 3, j = branch % 3;
+        double total = k + j, remaining = lower - total;
+        std::vector<Vec> chromosomes(parts.size());
+        bool feasible = true;
+        for (int i: order) {
+            remaining -= bounds[i].lower[branch];
+            if (total + bounds[i].lower[branch] + remaining > best) {
+                feasible = false;
+                break;
             }
-            if (!feasible)
-                continue;
-            Vec language = std::move(chromosomes[0]); // chromosomes back in profile order
-            for (size_t i = 1; i < chromosomes.size(); ++i)
-                fst::Concat(&language, chromosomes[i]);
-            if (total < best) {
-                best = total;
-                combined = std::move(language);
-            } else if (total == best) {
-                fst::Union(&combined, language);
+            double room = best - total - remaining;
+            // Every chromosome costs >= 0, so this one may use at most best - total
+            // search() keeps states equal to the cap, so ties survive
+            auto graph = make_graph(m, parts[i].first, parts[i].second, k, j, false);
+            auto result = search(*graph, room, true);
+            if (!std::isfinite(result.cost)) {
+                feasible = false;
+                break;
             }
+            total += result.cost;
+            chromosomes[i] = canonical(std::move(result.tight));
         }
+        if (!feasible)
+            continue;
+        Vec language = std::move(chromosomes[0]); // chromosomes back in profile order
+        for (size_t i = 1; i < chromosomes.size(); ++i)
+            fst::Concat(&language, chromosomes[i]);
+        if (total < best) {
+            best = total;
+            combined = std::move(language);
+        } else if (total == best) {
+            fst::Union(&combined, language);
+        }
+    }
     if (!std::isfinite(best) || combined.Start() < 0 || best + l.offset + r.offset >= INF)
         throw std::runtime_error("No finite common ancestor or cost exceeds range");
-    return {canonical(std::move(combined)), best + l.offset + r.offset, l.length};
+    return {canonical(std::move(combined)), int(best) + l.offset + r.offset, l.length};
 }
 
 // Top-down: one best child word for the fixed parent word, and its cost
@@ -148,15 +158,26 @@ static Message join(Model &m, const Message &l, const Message &r) {
 static std::pair<std::string, double> resolve(Model &m, const std::string &parent, const Message &child) {
     Message p{linear(parent), 0, int(parent.size())};
     auto parts = split(p, child);
+    auto bounds = message_bounds(m, parts, true);
     std::string bestword;
-    double best = infinity;
-    for (int j = 0; j <= m.max_wgds; ++j) {
-        double total = j;
+    bool found = false;
+    auto [branches, best] = branch_order(m, bounds, true);
+
+    for (auto [lower, branch] : branches) {
+        if (lower > best || (found && lower == best))
+            continue;
+
+        double total = branch, remaining = lower - total;
         std::string word;
         bool feasible = true;
-        for (auto &part : parts) {
-            auto graph = make_graph(m, part.first, part.second, 0, j, true);
-            auto result = search(*graph, best - total, true);
+        for (size_t i = 0; i < parts.size(); ++i) {
+            remaining -= bounds[i].lower[branch];
+            if (total + bounds[i].lower[branch] + remaining > best) {
+                feasible = false;
+                break;
+            }
+            auto graph = make_graph(m, parts[i].first, parts[i].second, 0, branch, true);
+            auto result = search(*graph, best - total - remaining, true);
             if (!std::isfinite(result.cost)) {
                 feasible = false;
                 break;
@@ -164,12 +185,13 @@ static std::pair<std::string, double> resolve(Model &m, const std::string &paren
             total += result.cost;
             word += choose(result.tight, true).first;
         }
-        if (feasible && total < best) {
+        if (feasible && (!found || total < best)) {
             best = total;
             bestword = std::move(word);
+            found = true;
         }
     }
-    if (!std::isfinite(best))
+    if (!found)
         return {"", infinity};
     return {bestword, best + child.offset};
 }
