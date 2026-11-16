@@ -1,0 +1,8 @@
+//
+// Created by chenxi on 16.11.26.
+//
+
+#ifndef FSTENGINE_CLION_ASTAR_HPP
+#define FSTENGINE_CLION_ASTAR_HPP
+
+#endif //FSTENGINE_CLION_ASTAR_HPP

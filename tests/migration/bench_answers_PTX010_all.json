@@ -1,0 +1,9 @@
+{
+  "distances": {
+    "ProstateCA_A29C-0017_CRUK_PC_0017_T1:RSuperficialInguinalLNMetA1_A29A-0017_CRUK_PC_0017_M1": 139.0,
+    "ProstateCA_A29C-0017_CRUK_PC_0017_T1:diploid": 129.0,
+    "RSuperficialInguinalLNMetA1_A29A-0017_CRUK_PC_0017_M1:diploid": 108.0
+  },
+  "tree_length": 207.0,
+  "profiles_sha256": "2f8c4eac599077cb77771828fd295c90702423f74f4574712c2a11b3537221a9"
+}
