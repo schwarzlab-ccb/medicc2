@@ -28,27 +28,6 @@
 #include "search.hpp"
 #include "bounds.hpp"
 
-// Every parent that can reach a word of 'child' with exactly k WGDs:
-// A o child, then AD o ... k times. Lazy. With `project`, keep only the parent side.
-static Ptr branch_graph(Model &m, const Message &child, int k, bool project) {
-    auto graph = compose(m.a, child.fst);
-    for (int i = 0; i < k; ++i)
-        graph = compose(m.ad, *graph);
-    if (project)
-        graph = std::make_unique<fst::ProjectFst<Arc>>(*graph, fst::ProjectType::INPUT);
-    return graph;
-}
-
-// directed = false (join): ancestors of left with k WGDs  o  ancestors of right with j WGDs.
-//   Its paths are the common ancestors z, cost T(z, left) + T(z, right) without the WGD charge.
-// directed = true (resolve): parent word  o  (parent -> child edge with j WGDs, ending in the
-//   child message). Input side = parent, output side = child. k is not used.
-static Ptr make_graph(Model &m, const Message &left, const Message &right, int k, int j, bool directed) {
-    auto r = branch_graph(m, right, j, !directed);
-    auto l = directed ? Ptr(new Vec(left.fst)) : branch_graph(m, left, k, true);
-    return compose(*l, *r); // ComposeFst keeps its own copies of l and r
-}
-
 // The columns begin..end of a message as a message of its own (layers from fst_operations.hpp)
 static Message slice(const Message &m, const Layers &ls, int begin, int end) {
     Message out;

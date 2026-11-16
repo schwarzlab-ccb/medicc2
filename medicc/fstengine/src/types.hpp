@@ -28,9 +28,16 @@ struct Message {
     double offset = 0;
     int length = 0;
 };
+struct SuffixData; // pair_filter.hpp
 struct Model {
     Vec a, ad;
+    // a_even: A with only even input copy numbers (and X). After a WGD every copy number is
+    // even (2c, capped at 8), so that A after the last WGD can be a_even (built in fstengine.cpp)
+    Vec a_even;
     int max_wgds = 2;
+    // A o (one CN string), with its forward / backward distances, per string ("A" / "E" + string).
+    // Built by suffix_data() (pair_filter.hpp); large, so the scheduler clears it after each row.
+    std::unordered_map<std::string, std::shared_ptr<const SuffixData>> suffix_cache;
     // Exact chromosome scores. key = score_key(x, y, k, j, directed) (bounds.hpp). Only finished
     // searches are stored; a search stopped by its cap proves nothing. Cleared by fstengine_clear.
     std::unordered_map<std::string, double> chromosome_scores;
